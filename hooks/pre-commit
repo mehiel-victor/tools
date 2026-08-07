@@ -1,0 +1,30 @@
+#!/bin/sh
+set -eu
+
+max_lines=${PERSONAL_MAX_FILE_LINES:-1000}
+
+git diff --cached --name-only --diff-filter=ACMR | while IFS= read -r file; do
+    [ -n "$file" ] || continue
+    git cat-file -e ":$file" 2>/dev/null || continue
+
+    if git show ":$file" | LC_ALL=C grep -Iq .; then
+        lines=$(git show ":$file" | awk 'END { print NR }')
+        if [ "$lines" -gt "$max_lines" ]; then
+            echo "quality gate: $file has $lines lines (maximum: $max_lines)" >&2
+            exit 1
+        fi
+
+        if [ "${ALLOW_TODO:-0}" != "1" ] &&
+           git diff --cached --unified=0 -- "$file" |
+               sed -n '/^+++ /d; /^+/p' |
+               grep -En 'TODO|FIXME' >/dev/null; then
+            echo "quality gate: $file adds TODO/FIXME; set ALLOW_TODO=1 only with explicit approval" >&2
+            exit 1
+        fi
+    fi
+done
+
+if [ -n "${PERSONAL_QUALITY_COMMAND:-}" ]; then
+    echo "quality gate: running $PERSONAL_QUALITY_COMMAND"
+    sh -c "$PERSONAL_QUALITY_COMMAND"
+fi

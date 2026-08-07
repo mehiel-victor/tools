@@ -1,0 +1,4 @@
+interface:
+  display_name: "Engineering Quality"
+  short_description: "Apply Victor engineering standards to implementation and review"
+  default_prompt: "Apply the engineering-quality workflow to this task, emphasizing simplicity, testability, maintainability, and explicit validation."

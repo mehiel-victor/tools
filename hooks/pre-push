@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+
+if [ "${SKIP_PERSONAL_TESTS:-0}" = "1" ]; then
+    echo "quality gate: tests explicitly bypassed with SKIP_PERSONAL_TESTS=1" >&2
+    exit 0
+fi
+
+if [ -z "${PERSONAL_TEST_COMMAND:-}" ]; then
+    echo "quality gate: PERSONAL_TEST_COMMAND is required before push" >&2
+    echo "example: export PERSONAL_TEST_COMMAND='./gradlew test'" >&2
+    exit 1
+fi
+
+echo "quality gate: running $PERSONAL_TEST_COMMAND"
+sh -c "$PERSONAL_TEST_COMMAND"
