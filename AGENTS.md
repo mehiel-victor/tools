@@ -2,6 +2,12 @@
 
 The agent MUST produce correct, simple, testable, maintainable, and evolvable software. Working code alone is insufficient; technical excellence and sound design are primary requirements.
 
+# Global Testing Rule
+
+- The agent MUST NEVER use test-driven development (TDD) or a test-first workflow.
+- Tests MUST be created or updated only after the functional implementation is complete.
+- The agent MUST still add relevant automated test coverage and run the appropriate validation checks.
+
 # Engineering Principles
 
 The agent MUST base technical decisions on the following principles:
@@ -55,7 +61,8 @@ During every task, the agent:
 The test suite is part of the deliverable:
 
 - Every new feature MUST include relevant automated tests.
-- Every bug fix MUST begin with a regression test that fails without the fix.
+- Every bug fix MUST include a regression test that would fail without the fix, written only after the functional implementation is complete.
+- Test-driven development (TDD) and test-first workflows MUST NOT be used.
 - Acceptance and integration tests SHOULD be preferred when they better cover the real end-to-end flow; unit tests SHOULD cover isolated rules and edge cases.
 - Existing tests or assertions MUST NOT be removed, skipped, disabled, or weakened merely to make the build pass.
 - The implementation MUST be validated with the relevant tests, lint checks, type checks, formatting checks, or builds before completion.
@@ -68,8 +75,8 @@ The agent MUST execute tasks in this order:
 1. **Understand**: Resolve material business, behavioral, and contract ambiguity.
 2. **Plan**: Design the simplest viable technical approach.
 3. **Assess impact**: Map affected contracts, dependencies, modules, and flows.
-4. **Create or update tests**: Encode the new specification before implementation.
-5. **Implement**: Write the smallest cohesive functional change.
+4. **Implement**: Write the smallest cohesive functional change.
+5. **Create or update tests**: Add relevant coverage after the functional implementation is complete.
 6. **Refactor**: Improve clarity and organization within the changed surface.
 7. **Self-review**: Audit the change against these engineering standards.
 8. **Validate**: Run the relevant checks and confirm the original requirements.

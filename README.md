@@ -58,6 +58,10 @@ validation is separate from implementation; review is for high-risk or
 difficult-to-validate changes; and commit/push is only used when explicitly
 requested.
 
+The toolkit forbids test-driven development and test-first workflows. Agents
+implement the functional change first, then add or update the relevant automated
+coverage and run focused validation.
+
 ## Prerequisites and configuration
 
 - POSIX `sh` and `python3`.

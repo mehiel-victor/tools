@@ -21,7 +21,7 @@ When delegation is justified:
 - When every affected unit-test manifest entry passes, do not rerun the global unit-test suite by default. Treat integration and end-to-end validation as separate scopes only when explicitly required by the task or a later routing policy. The parent classifies validator failures before requesting repairs. Consolidate likely implementation failures and resume the same implementer with `followup_task` so it retains its context and file ownership, then send the affected checks back to a validator. Prefer no more than two repair cycles before escalating unresolved, flaky, environmental, or contract-level failures.
 - For a truly trivial change with one fast and obvious check, `quick-implementer` may validate directly instead of spawning a validator.
 
-Every implementation assignment must require the smallest viable change, affected-test coverage, compatibility with existing contracts, no unauthorized dependencies or TODO markers, and an explicit validation manifest. Bug fixes must begin with a regression test that demonstrates the defect. Validation failures must be reported rather than bypassed or hidden.
+Every implementation assignment must require the smallest viable change, affected-test coverage, compatibility with existing contracts, no unauthorized dependencies or TODO markers, and an explicit validation manifest. Test-driven development and test-first workflows must never be used. Bug-fix regression tests must be written only after the functional implementation is complete. Validation failures must be reported rather than bypassed or hidden.
 
 Select custom agents by their exact `name` from `~/.codex/agents`:
 

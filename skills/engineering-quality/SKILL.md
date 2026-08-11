@@ -10,14 +10,15 @@ description: Apply Victor's engineering standards to feature work, bug fixes, re
 1. Restate the requested behavior and resolve material business or contract ambiguity.
 2. Identify affected modules, public APIs, dependencies, data flows, and tests.
 3. Choose the smallest design that satisfies the requirement without speculative abstractions.
-4. Add or update tests before implementation. For bugs, demonstrate the defect with a failing regression test first.
-5. Implement the narrowest cohesive change while preserving unrelated edits and compatible contracts.
+4. Implement the narrowest cohesive change while preserving unrelated edits and compatible contracts.
+5. Add or update focused tests only after the functional implementation is complete. For bugs, include regression coverage that would fail without the fix.
 6. Refactor only the changed surface for clarity, single responsibility, low coupling, and high cohesion.
 7. Run the focused tests plus relevant lint, type-check, build, or formatting checks.
 8. Audit the final diff and report evidence, risks, and unverified points.
 
 ## Design constraints
 
+- Never use test-driven development (TDD) or a test-first workflow.
 - Prefer explicit, readable code over clever compression.
 - Apply DRY only to real duplicated knowledge; do not manufacture premature abstractions.
 - Keep domain rules independent from UI, persistence, frameworks, and other infrastructure.
