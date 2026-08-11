@@ -3,6 +3,10 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 CODEX_HOME=${CODEX_HOME:-"$HOME/.codex"}
 export SCRIPT_DIR CODEX_HOME
+if ! command -v npm >/dev/null 2>&1; then
+ echo "error: npm is required to install Impeccable (Node.js 22.12+)" >&2
+ exit 1
+fi
 python3 - <<'PY'
 import base64,hashlib,json,os,pathlib,shutil,time
 src=pathlib.Path(os.environ['SCRIPT_DIR']); home=pathlib.Path(os.environ['CODEX_HOME']).expanduser()
@@ -101,5 +105,7 @@ if updated!=old:
  g['ownership']='managed'; g['backup']=backup(gf) if gf.exists() else None; gf.write_bytes(updated); print('updated:',gf)
 json.dump({'files':current,'global':g},sf.open('w'),indent=2); sf.write_text(sf.read_text()+'\n')
 PY
+npm exec --yes -- impeccable install -y --providers=codex --scope=global --no-hooks
 echo "Codex subagents installed under $CODEX_HOME"
+echo "Impeccable installed globally for Codex under $HOME/.agents/skills"
 echo "Restart Codex to load the new agents and instructions"

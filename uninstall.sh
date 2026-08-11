@@ -30,3 +30,4 @@ if p and p.exists() and g.get('ownership')=='managed':
 sf.unlink(missing_ok=True)
 PY
 echo "Codex subagents uninstalled from $CODEX_HOME"
+echo "Impeccable was preserved because it may be shared with other Codex setups"

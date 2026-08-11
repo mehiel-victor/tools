@@ -8,6 +8,12 @@ The agent MUST produce correct, simple, testable, maintainable, and evolvable so
 - Tests MUST be created or updated only after the functional implementation is complete.
 - The agent MUST still add relevant automated test coverage and run the appropriate validation checks.
 
+# Global Frontend Design Rule
+
+- The agent MUST use the globally installed `impeccable` skill for every task that involves frontend design decisions or frontend UI implementation, including new interfaces, redesigns, visual refinements, layouts, typography, color, motion, responsive behavior, accessibility, UX copy, and design-system choices.
+- The agent MUST follow Impeccable's project-context workflow and preserve the active product and design system. If a frontend project has not been initialized with Impeccable, the agent MUST follow the skill's routing instructions for missing design context rather than inventing generic UI conventions.
+- This rule does not apply to backend-only or non-UI work.
+
 # Engineering Principles
 
 The agent MUST base technical decisions on the following principles:

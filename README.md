@@ -1,12 +1,13 @@
 # Victor's portable Codex toolkit
 
-Packages Codex subagents, engineering standards, a reusable quality skill, and
-opt-in Git hooks. 
+Packages Codex subagents, engineering standards, Impeccable frontend design
+guidance, a reusable quality skill, and opt-in Git hooks.
 
 ## Repository layout
 
 - `AGENTS.md` — Victor's global engineering standards.
 - `agents/` — TOML definitions for the available custom agents.
+- [Impeccable](https://impeccable.style/) — installed globally for every Codex frontend decision.
 - `skills/engineering-quality/` — reusable implementation and review workflow.
 - `hooks/` — opt-in Git quality gates for pre-commit and pre-push.
 - `opencode/agents/` — native OpenCode Markdown definitions for the same roles.
@@ -65,6 +66,7 @@ coverage and run focused validation.
 ## Prerequisites and configuration
 
 - POSIX `sh` and `python3`.
+- Node.js 22.12+ and `npm`, used to install the Codex-tailored Impeccable skill.
 - Agent TOML files are validated with Python `tomllib` when available.
 - Existing `config.toml` files that require parsing need Python 3.11+
   (`tomllib`) or the installable `tomli` package. A missing parser or malformed
@@ -94,11 +96,14 @@ configuration is not hot-reloaded.
 
 The installer copies agent definitions to `$CODEX_HOME/agents`, installs the
 `engineering-quality` skill, installs the standards and routing rules, and adds
-a managed import block to `$CODEX_HOME/AGENTS.md`. It enables `[features.multi_agent_v2]` with
-`hide_spawn_agent_metadata = false` and `tool_namespace = "agents"` only when
-that table is not already defined. Existing files are backed up before being
-replaced or modified. A state manifest at
-`$CODEX_HOME/.subagents_configs-state.json` records ownership and hashes.
+a managed import block to `$CODEX_HOME/AGENTS.md`. It also runs Impeccable's
+official non-interactive installer for the Codex provider at
+`$HOME/.agents/skills/impeccable`. Project hooks are not enabled globally; use
+`$impeccable hooks on` inside a frontend project when desired. It enables
+`[features.multi_agent_v2]` with `hide_spawn_agent_metadata = false` and
+`tool_namespace = "agents"` only when that table is not already defined.
+Existing files are backed up before being replaced or modified. A state manifest
+at `$CODEX_HOME/.subagents_configs-state.json` records ownership and hashes.
 
 Re-running is safe: unchanged managed files remain unchanged, and stale package
 files are removed or restored only when their installed bytes still match the
@@ -121,7 +126,9 @@ still match, restoring backups for replaced files. It removes only the exact
 managed block from `AGENTS.md` (after making a backup), preserving surrounding
 content and edits. The installer-added `config.toml` feature block is
 intentionally left in place because ownership cannot be safely proven after
-edits. If no valid state manifest exists, nothing is removed.
+edits. The third-party Impeccable installation is also preserved because it may
+have existed before this toolkit or be shared with another Codex setup. If no
+valid state manifest exists, nothing is removed.
 
 ## Optional Git hooks
 
@@ -148,8 +155,10 @@ hooks with `git config --local --unset core.hooksPath`.
 ## Manual setup and verification
 
 For a manual setup, copy the TOML files into `$CODEX_HOME/agents`, copy the
-skill into `$CODEX_HOME/skills`, copy `AGENTS.md` and the routing rules into
-`$CODEX_HOME`, and add the absolute-path imports shown in `templates/AGENTS.md.template` to
+repository skill into `$CODEX_HOME/skills`, install Impeccable with
+`npm exec --yes -- impeccable install -y --providers=codex --scope=global --no-hooks`,
+copy `AGENTS.md` and the routing rules into `$CODEX_HOME`, and add the
+absolute-path imports shown in `templates/AGENTS.md.template` to
 `$CODEX_HOME/AGENTS.md`. Ensure the multi-agent feature table is present in
 `$CODEX_HOME/config.toml` if your Codex installation requires it.
 
