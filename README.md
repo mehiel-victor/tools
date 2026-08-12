@@ -1,7 +1,8 @@
 # Victor's portable Codex toolkit
 
 Packages Codex subagents, engineering standards, Impeccable frontend design
-guidance, a reusable quality skill, and opt-in Git hooks.
+guidance, reusable skills (including daily conversation archiving), and opt-in
+Git hooks.
 
 ## Repository layout
 
@@ -9,6 +10,9 @@ guidance, a reusable quality skill, and opt-in Git hooks.
 - `agents/` — TOML definitions for the available custom agents.
 - [Impeccable](https://impeccable.style/) — installed globally for every Codex frontend decision.
 - `skills/engineering-quality/` — reusable implementation and review workflow.
+- `skills/codex-conversation-archive/` — deterministic, sanitized daily archive
+  workflow for visible Codex conversations.
+- `automations/` — versioned Codex desktop automation recipes (no local IDs).
 - `hooks/` — opt-in Git quality gates for pre-commit and pre-push.
 - `opencode/agents/` — native OpenCode Markdown definitions for the same roles.
 - `rules/SUBAGENT_ROUTING.md` — delegation, ownership, validation, and role-selection rules.
@@ -95,8 +99,9 @@ match the Codex reasoning effort. Restart OpenCode after installing because its
 configuration is not hot-reloaded.
 
 The installer copies agent definitions to `$CODEX_HOME/agents`, installs the
-`engineering-quality` skill, installs the standards and routing rules, and adds
-a managed import block to `$CODEX_HOME/AGENTS.md`. It also runs Impeccable's
+`engineering-quality` and `codex-conversation-archive` skills, installs the
+standards and routing rules, and adds a managed import block to
+`$CODEX_HOME/AGENTS.md`. It also runs Impeccable's
 official non-interactive installer for the Codex provider at
 `$HOME/.agents/skills/impeccable`. Project hooks are not enabled globally; use
 `$impeccable hooks on` inside a frontend project when desired. It enables
@@ -154,8 +159,8 @@ hooks with `git config --local --unset core.hooksPath`.
 
 ## Manual setup and verification
 
-For a manual setup, copy the TOML files into `$CODEX_HOME/agents`, copy the
-repository skill into `$CODEX_HOME/skills`, install Impeccable with
+For a manual setup, copy the TOML files into `$CODEX_HOME/agents`, copy both
+repository skills into `$CODEX_HOME/skills`, install Impeccable with
 `npm exec --yes -- impeccable install -y --providers=codex --scope=global --no-hooks`,
 copy `AGENTS.md` and the routing rules into `$CODEX_HOME`, and add the
 absolute-path imports shown in `templates/AGENTS.md.template` to
@@ -165,3 +170,21 @@ absolute-path imports shown in `templates/AGENTS.md.template` to
 After installation, verify the output reports `TOML validation passed` (or the
 documented validation skip), inspect the installed files under `$CODEX_HOME`,
 and run the installer a second time to confirm it reports unchanged files.
+
+## Daily conversation archive automation
+
+The versioned recipe is
+[`automations/codex-conversation-archive.yaml`](automations/codex-conversation-archive.yaml).
+It describes a daily 23:30 schedule in `America/Sao_Paulo` and explicitly
+invokes `$codex-conversation-archive`. The Codex desktop app creates and
+manages the schedule; `install.sh` installs the skill only. Follow the official
+Codex desktop automation documentation for creating or editing the task rather
+than adding a local scheduler or relying on an undocumented path.
+
+The skill exports only today's visible, unarchived tasks to
+`codex-conversations/YYYY/MM/YYYY-MM-DD/`, with one deterministic
+`<stable-thread-id>.md` per conversation and an `index.md`, sanitizes secrets
+before staging, and confirms the result on `origin/main`. It uses an isolated
+clone under the workspace-owned `work` directory, never `/tmp`, and leaves
+protected-main pull requests ready for checks and squash merge when policy
+prevents a direct push.
