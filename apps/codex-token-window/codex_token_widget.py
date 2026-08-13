@@ -499,9 +499,9 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         self.set_resizable(True)
         self.set_decorated(False)
         self.set_keep_above(self._pinned)
-        self.set_skip_taskbar_hint(True)
+        self.set_skip_taskbar_hint(False)
         self.set_skip_pager_hint(True)
-        self.set_type_hint(Gdk.WindowTypeHint.UTILITY)
+        self.set_type_hint(Gdk.WindowTypeHint.NORMAL)
         self.set_app_paintable(True)
         visual = self.get_screen().get_rgba_visual()
         if visual is not None:
@@ -755,7 +755,7 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
     def _on_window_state(self, _widget: Any, event: Any) -> bool:
         self._minimized = bool(event.new_window_state & Gdk.WindowState.ICONIFIED)
         if not self._minimized:
-            self.set_skip_taskbar_hint(True)
+            self.set_skip_taskbar_hint(False)
             GLib.idle_add(self._apply_window_layer)
         return False
 
