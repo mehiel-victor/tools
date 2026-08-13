@@ -18,6 +18,8 @@ Git hooks.
 - `rules/SUBAGENT_ROUTING.md` — delegation, ownership, validation, and role-selection rules.
 - `rules/OPENCODE_SUBAGENT_ROUTING.md` — routing rules using OpenCode's native task semantics.
 - `templates/AGENTS.md.template` — a manual global-instructions example.
+- `apps/codex-token-window/` — an optional GTK/Cairo floating Codex usage widget
+  with a local application-menu installer.
 - `install.sh` / `uninstall.sh` — guarded installer and remover for Codex.
 - `install-opencode.sh` / `uninstall-opencode.sh` — guarded installer and remover for OpenCode.
 
@@ -156,6 +158,14 @@ export PERSONAL_TEST_COMMAND='./gradlew test'
 
 Use `SKIP_PERSONAL_TESTS=1` only for an intentional, visible bypass. Disable the
 hooks with `git config --local --unset core.hooksPath`.
+
+## Optional Codex token window
+
+Run `apps/codex-token-window/launch-token-widget` for the floating usage
+window. To install its application-menu entry and icon using the checkout's
+actual location, run `apps/codex-token-window/install.sh`; remove only those
+managed artifacts with the matching `uninstall.sh`. This component is
+independent of the toolkit installer.
 
 ## Manual setup and verification
 
