@@ -103,40 +103,6 @@ def system_prefers_dark(color_scheme: str, gtk_theme: str = "", gtk_prefers_dark
     return gtk_prefers_dark or "dark" in gtk_theme.lower()
 
 
-def context_menu_css(dark_mode: bool) -> str:
-    """Return menu colors that match the palette rendered by the widget."""
-    if dark_mode:
-        background, border, text, hover = "#242424", "#4B5361", "#F7F9FC", "#333333"
-    else:
-        background, border, text, hover = "#ECEEEC", "#AEB5B0", "#202124", "#DEE2DF"
-    return f"""
-        .codex-token-context-menu {{
-            background-color: {background};
-            border: 1px solid {border};
-        }}
-        .codex-token-context-menu menuitem {{
-            background-color: transparent;
-            color: {text};
-            padding: 6px 12px;
-        }}
-        .codex-token-context-menu menuitem label {{
-            color: {text};
-        }}
-        .codex-token-context-menu menuitem:hover,
-        .codex-token-context-menu menuitem:active {{
-            background-color: {hover};
-            color: {text};
-        }}
-        .codex-token-context-menu menuitem:hover label,
-        .codex-token-context-menu menuitem:active label {{
-            color: {text};
-        }}
-        .codex-token-context-menu separator {{
-            background-color: {border};
-        }}
-    """
-
-
 def codex_executable() -> str:
     """Locate the Codex binary bundled with the desktop app or on PATH."""
     if DEFAULT_CODEX_EXECUTABLE.is_file():
@@ -527,7 +493,6 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         self._dark_mode = True
         self._interface_settings: Optional[Any] = None
         self._gtk_settings: Optional[Any] = None
-        self._context_menu_css_provider: Optional[Any] = None
         self._visibility_check_pending = False
         self._widget_size = WIDGET_SIZE
         self._minimized = False
@@ -637,6 +602,7 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         except GLib.Error:
             self._interface_settings = None
         self._sync_system_theme()
+        self._apply_native_theme_preference()
 
     def _sync_system_theme(self) -> None:
         color_scheme = "default"
@@ -650,10 +616,18 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         gtk_prefers_dark = bool(gtk_settings.get_property("gtk-application-prefer-dark-theme")) if gtk_settings else False
         self._dark_mode = system_prefers_dark(color_scheme, gtk_theme, gtk_prefers_dark)
 
+    def _apply_native_theme_preference(self) -> None:
+        """Let GTK render native menus using the same system appearance."""
+        if self._gtk_settings is None:
+            return
+        preferred = bool(self._gtk_settings.get_property("gtk-application-prefer-dark-theme"))
+        if preferred != self._dark_mode:
+            self._gtk_settings.set_property("gtk-application-prefer-dark-theme", self._dark_mode)
+
     def _on_system_theme_changed(self, _settings: Any, _key: str) -> None:
         previous = self._dark_mode
         self._sync_system_theme()
-        self._apply_context_menu_theme()
+        self._apply_native_theme_preference()
         if self._dark_mode != previous:
             self.area.queue_draw()
 
@@ -671,13 +645,6 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
 
     def _build_context_menu(self) -> Any:
         menu = Gtk.Menu()
-        menu.get_style_context().add_class("codex-token-context-menu")
-        self._context_menu_css_provider = Gtk.CssProvider()
-        menu.get_style_context().add_provider(
-            self._context_menu_css_provider,
-            Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
-        )
-        self._apply_context_menu_theme()
         refresh = Gtk.MenuItem.new_with_label("Atualizar agora")
         refresh.connect("activate", lambda _item: self.refresh())
         menu.append(refresh)
@@ -700,11 +667,6 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         menu.append(close)
         menu.show_all()
         return menu
-
-    def _apply_context_menu_theme(self) -> None:
-        if self._context_menu_css_provider is None:
-            return
-        self._context_menu_css_provider.load_from_data(context_menu_css(self._dark_mode).encode("utf-8"))
 
     def _next_account(self) -> None:
         self._profile_index = (self._profile_index + 1) % len(self._profiles)
