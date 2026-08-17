@@ -1,0 +1,19 @@
+schema: 1
+name: codex-conversation-archive
+description: Daily deterministic export of visible, unarchived Codex conversations.
+managed_by: Codex desktop
+schedule:
+  time: "23:30"
+  timezone: America/Sao_Paulo
+  recurrence: daily
+task:
+  instruction: |
+    Invoke $codex-conversation-archive explicitly. Use the selected project as
+    workspace context and publish only to mehiel-victor/tools. The Codex desktop
+    app manages this task and its schedule; this recipe contains no
+    machine-specific IDs, timestamps, or unsupported internal paths. Follow the
+    skill's protected-main, sanitization, and remote-confirmation rules exactly.
+  repository: mehiel-victor/tools
+  archive_path: codex-conversations/YYYY/MM/YYYY-MM-DD/
+  index_file: index.md
+  conversation_files: <sanitized-stable-thread-id>.md
