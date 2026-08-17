@@ -455,7 +455,7 @@ def draw_widget(
         return
 
     limit = limits[selected]
-    label = "CODEX SPARK" if is_spark else "GERAL"
+    label = "GERAL" if not is_spark else limit.name.removesuffix(" · sessão").removesuffix(" · semanal").upper()
     _draw_gradient_ring(context, limit.remaining_percent, colors)
     _draw_text(context, label, 67, "Sans Bold 8", colors.spark_label if is_spark else colors.label)
     _draw_text(context, f"{limit.remaining_percent}%", 111, "Sans Bold 26", colors.primary)

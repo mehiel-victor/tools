@@ -205,9 +205,12 @@ def scan_local_cost(home: str = "", days: int = 30) -> CostSummary:
                 continue
             for raw in path.read_text(encoding="utf-8", errors="ignore").splitlines():
                 item = json.loads(raw)
-                if item.get("type") != "event_msg" or item.get("payload", {}).get("type") != "token_count":
+                payload = item.get("payload")
+                if item.get("type") != "event_msg" or not isinstance(payload, dict) or payload.get("type") != "token_count":
                     continue
-                info = item["payload"].get("info", {})
+                info = payload.get("info") or {}
+                if not isinstance(info, dict):
+                    continue
                 usage = info.get("last_token_usage") or info.get("total_token_usage") or {}
                 totals["input"] += int(usage.get("input_tokens", 0) or 0)
                 totals["output"] += int(usage.get("output_tokens", 0) or 0)
