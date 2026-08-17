@@ -492,6 +492,7 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         self._click_through = False
         self._dark_mode = True
         self._interface_settings: Optional[Any] = None
+        self._gtk_settings: Optional[Any] = None
         self._visibility_check_pending = False
         self._widget_size = WIDGET_SIZE
         self._minimized = False
@@ -583,7 +584,14 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         return x / scale, y / scale
 
     def _configure_system_theme(self) -> None:
-        """Follow GNOME's color-scheme preference and repaint on live changes."""
+        """Follow the system GTK appearance and repaint when it changes."""
+        self._gtk_settings = Gtk.Settings.get_default()
+        if self._gtk_settings is not None:
+            self._gtk_settings.connect("notify::gtk-theme", self._on_system_theme_changed)
+            self._gtk_settings.connect(
+                "notify::gtk-application-prefer-dark-theme",
+                self._on_system_theme_changed,
+            )
         try:
             schema_source = Gio.SettingsSchemaSource.get_default()
             schema = schema_source.lookup("org.gnome.desktop.interface", True) if schema_source else None
@@ -601,7 +609,9 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         if self._interface_settings is not None:
             color_scheme = self._interface_settings.get_string("color-scheme")
             gtk_theme = self._interface_settings.get_string("gtk-theme")
-        gtk_settings = Gtk.Settings.get_default()
+        gtk_settings = self._gtk_settings
+        if gtk_settings is not None:
+            gtk_theme = gtk_settings.get_property("gtk-theme") or gtk_theme
         gtk_prefers_dark = bool(gtk_settings.get_property("gtk-application-prefer-dark-theme")) if gtk_settings else False
         self._dark_mode = system_prefers_dark(color_scheme, gtk_theme, gtk_prefers_dark)
 
