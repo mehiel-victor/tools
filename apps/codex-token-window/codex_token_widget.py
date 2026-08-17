@@ -119,9 +119,16 @@ def context_menu_css(dark_mode: bool) -> str:
             color: {text};
             padding: 6px 12px;
         }}
+        .codex-token-context-menu menuitem label {{
+            color: {text};
+        }}
         .codex-token-context-menu menuitem:hover,
         .codex-token-context-menu menuitem:active {{
             background-color: {hover};
+            color: {text};
+        }}
+        .codex-token-context-menu menuitem:hover label,
+        .codex-token-context-menu menuitem:active label {{
             color: {text};
         }}
         .codex-token-context-menu separator {{

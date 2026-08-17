@@ -21,6 +21,7 @@ class SystemThemeTests(unittest.TestCase):
         light_css = context_menu_css(False)
         self.assertIn("background-color: #242424", dark_css)
         self.assertIn("color: #F7F9FC", dark_css)
+        self.assertIn("menuitem label", dark_css)
         self.assertIn("background-color: #ECEEEC", light_css)
         self.assertIn("color: #202124", light_css)
 
