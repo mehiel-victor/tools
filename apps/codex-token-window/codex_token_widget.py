@@ -10,10 +10,13 @@ import shutil
 import subprocess
 import threading
 import time
+import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
+
+from codex_features import CodexSnapshot, configured_profiles, load_snapshot, notify, scan_local_cost
 
 try:
     import cairo
@@ -419,6 +422,7 @@ def draw_widget(
     hovered_control: Optional[str] = None,
     click_through: bool = False,
     dark_mode: bool = True,
+    status_text: Optional[str] = None,
 ) -> None:
     """Render the complete circular widget on a Cairo context."""
     colors = theme_colors(dark_mode)
@@ -456,7 +460,7 @@ def draw_widget(
     _draw_text(context, label, 67, "Sans Bold 8", colors.spark_label if is_spark else colors.label)
     _draw_text(context, f"{limit.remaining_percent}%", 111, "Sans Bold 26", colors.primary)
     _draw_text(context, "restante", 137, "Sans 8", colors.secondary)
-    _draw_text(context, format_reset_date(limit.resets_at), 163, "Sans 7", colors.tertiary)
+    _draw_text(context, status_text or format_reset_date(limit.resets_at), 163, "Sans 7", colors.tertiary)
 
     dot_gap = 10
     start_x = 120 - (len(limits) - 1) * dot_gap / 2
@@ -491,6 +495,10 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         self._visibility_check_pending = False
         self._widget_size = WIDGET_SIZE
         self._minimized = False
+        self._snapshot: Optional[CodexSnapshot] = None
+        self._cost = None
+        self._profiles = configured_profiles()
+        self._profile_index = 0
 
         self.set_title("Codex Token Widget")
         self.set_icon_name("codex-token-widget")
@@ -555,9 +563,19 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
             self._hovered_control,
             self._click_through,
             self._dark_mode,
+            self._status_text(),
         )
         context.restore()
         return False
+
+    def _status_text(self) -> Optional[str]:
+        if self._snapshot is None:
+            return None
+        if self._snapshot.credits.unlimited:
+            return "Créditos ilimitados"
+        if self._snapshot.credits.available and self._snapshot.credits.balance is not None:
+            return f"Créditos: {self._snapshot.credits.balance:g}"
+        return None
 
     def _base_point(self, x: float, y: float) -> tuple[float, float]:
         allocation = self.area.get_allocation()
@@ -607,6 +625,19 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
 
     def _build_context_menu(self) -> Any:
         menu = Gtk.Menu()
+        refresh = Gtk.MenuItem.new_with_label("Atualizar agora")
+        refresh.connect("activate", lambda _item: self.refresh())
+        menu.append(refresh)
+        account = Gtk.MenuItem.new_with_label("Alternar conta")
+        account.connect("activate", lambda _item: self._next_account())
+        menu.append(account)
+        costs = Gtk.MenuItem.new_with_label("Mostrar custo local")
+        costs.connect("activate", lambda _item: self._show_cost())
+        menu.append(costs)
+        dashboard = Gtk.MenuItem.new_with_label("Abrir painel do Codex")
+        dashboard.connect("activate", lambda _item: webbrowser.open("https://chatgpt.com/codex/settings/usage"))
+        menu.append(dashboard)
+        menu.append(Gtk.SeparatorMenuItem())
         minimize = Gtk.MenuItem.new_with_label("Minimizar")
         minimize.connect("activate", lambda _item: self._minimize())
         close = Gtk.MenuItem.new_with_label("Fechar")
@@ -616,6 +647,21 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         menu.append(close)
         menu.show_all()
         return menu
+
+    def _next_account(self) -> None:
+        self._profile_index = (self._profile_index + 1) % len(self._profiles)
+        self._limits = []
+        self._error = False
+        self.refresh()
+
+    def _show_cost(self) -> None:
+        if self._cost is None:
+            return
+        summary = self._cost
+        notify(
+            "Custo local do Codex",
+            f"{summary.days} dias · {summary.input_tokens + summary.output_tokens:,} tokens · estimado ${summary.estimated_cost:.2f}",
+        )
 
     def _on_motion(self, _area: Any, event: Any) -> bool:
         if self._press_origin and self._press_target == "resize":
@@ -682,7 +728,14 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         elif target == "resize":
             tooltip.set_text("Arraste para redimensionar")
         else:
-            return False
+            if self._snapshot is None:
+                return False
+            account = self._snapshot.account_email or "Conta atual"
+            plan = f" · {self._snapshot.plan}" if self._snapshot.plan else ""
+            cost = ""
+            if self._cost is not None:
+                cost = f"\nCusto local (30d): ${self._cost.estimated_cost:.2f}"
+            tooltip.set_text(f"{account}{plan}{cost}\nClique para alternar limites")
         return True
 
     def _update_cursor(self) -> None:
@@ -836,15 +889,22 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
 
     def _load_limits(self) -> None:
         try:
-            limits = read_usage_limits()
-            GLib.idle_add(self._finish_refresh, limits, False)
+            profile = self._profiles[self._profile_index]
+            snapshot = load_snapshot(profile["home"])
+            limits = [UsageLimit(item.name, item.used_percent, item.resets_at) for item in snapshot.windows]
+            cost = scan_local_cost(profile["home"])
+            GLib.idle_add(self._finish_refresh, limits, False, snapshot, cost)
         except (OSError, ValueError, TimeoutError, json.JSONDecodeError):
-            GLib.idle_add(self._finish_refresh, [], True)
+            GLib.idle_add(self._finish_refresh, [], True, None, None)
 
-    def _finish_refresh(self, limits: list[UsageLimit], error: bool) -> bool:
+    def _finish_refresh(self, limits: list[UsageLimit], error: bool, snapshot: Optional[CodexSnapshot] = None, cost: Any = None) -> bool:
         self._refreshing = False
         self._error = error
         if not error:
+            self._snapshot = snapshot
+            self._cost = cost
+            if snapshot and any(item.remaining_percent <= 20 for item in snapshot.windows):
+                notify("Limite do Codex próximo do fim", "Uma das janelas de uso está com 20% ou menos restante.")
             self._render_limits(limits)
         else:
             self.area.queue_draw()
