@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Codex Token Widget
+GenericName=Monitor de limites do Codex
+Comment=Mostra os limites de uso do Codex em um widget flutuante
+Exec=@EXEC@
+Icon=codex-token-widget
+Terminal=false
+Categories=Utility;
+Keywords=Codex;tokens;limites;uso;OpenAI;
+StartupNotify=true
+StartupWMClass=codex-token-widget
+X-GNOME-UsesNotifications=false

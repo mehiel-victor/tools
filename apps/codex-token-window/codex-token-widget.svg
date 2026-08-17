@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128" fill="none">
+  <defs>
+    <linearGradient id="shell" x1="24" y1="14" x2="105" y2="117" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#242A35"/>
+      <stop offset="1" stop-color="#11141B"/>
+    </linearGradient>
+    <linearGradient id="orbit" x1="35" y1="31" x2="98" y2="103" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#35DFC8"/>
+      <stop offset="0.53" stop-color="#50B9F8"/>
+      <stop offset="1" stop-color="#A78BFA"/>
+    </linearGradient>
+    <radialGradient id="core" cx="0" cy="0" r="1" gradientTransform="translate(60 58) rotate(49) scale(21)">
+      <stop stop-color="#FFFFFF"/>
+      <stop offset="1" stop-color="#DDE7F5"/>
+    </radialGradient>
+    <filter id="shadow" x="0" y="2" width="128" height="130" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="5" stdDeviation="5" flood-color="#000000" flood-opacity="0.32"/>
+    </filter>
+  </defs>
+
+  <g filter="url(#shadow)">
+    <rect x="8" y="8" width="112" height="112" rx="31" fill="url(#shell)"/>
+    <rect x="8.75" y="8.75" width="110.5" height="110.5" rx="30.25" stroke="#FFFFFF" stroke-opacity="0.08" stroke-width="1.5"/>
+  </g>
+
+  <circle cx="64" cy="64" r="38" stroke="#39414E" stroke-width="10"/>
+  <circle cx="64" cy="64" r="38" stroke="url(#orbit)" stroke-width="10" stroke-linecap="round"
+          stroke-dasharray="188 51" transform="rotate(-90 64 64)"/>
+
+  <circle cx="64" cy="64" r="14" fill="#171B23" stroke="#FFFFFF" stroke-opacity="0.1" stroke-width="1.5"/>
+  <path d="M64 48C66.9 56.5 71.5 61.1 80 64C71.5 66.9 66.9 71.5 64 80C61.1 71.5 56.5 66.9 48 64C56.5 61.1 61.1 56.5 64 48Z" fill="url(#core)"/>
+  <circle cx="64" cy="64" r="4.5" fill="#35DFC8"/>
+</svg>
