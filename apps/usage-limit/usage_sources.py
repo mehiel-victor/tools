@@ -235,7 +235,7 @@ def read_antigravity_limits() -> list[UsageLimit]:
         timeout=35,
     )
     if result.returncode != 0:
-        raise RuntimeError("Antigravity usage command failed")
+        raise RuntimeError(f"Antigravity usage command failed (code {result.returncode}): {result.stderr}")
     try:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError as exc:
