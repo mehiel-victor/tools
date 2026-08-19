@@ -52,6 +52,14 @@ PIN_CONTROL = (120, 15)
 RESIZE_CONTROL = (160, 15)
 CONTROL_RADIUS = 13
 
+def log_debug(message: str) -> None:
+    try:
+        with open("/tmp/usage_limit_debug.log", "a") as f:
+            from datetime import datetime
+            f.write(f"{datetime.now().isoformat()} - {message}\n")
+    except Exception:
+        pass
+
 
 @dataclass(frozen=True)
 class ThemeColors:
@@ -602,7 +610,9 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
         if event.button != 1:
             return False
         self._press_origin = (event.x_root, event.y_root)
-        self._press_target = control_at(*self._base_point(event.x, event.y))
+        base_x, base_y = self._base_point(event.x, event.y)
+        self._press_target = control_at(base_x, base_y)
+        log_debug(f"Press at raw=({event.x}, {event.y}) base=({base_x}, {base_y}) target={self._press_target}")
         self._resize_start_size = self._widget_size
         self._did_drag = False
         return True
@@ -612,6 +622,9 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
         refresh = Gtk.MenuItem.new_with_label("Atualizar agora")
         refresh.connect("activate", lambda _item: self.refresh())
         menu.append(refresh)
+        toggle_prov = Gtk.MenuItem.new_with_label("Alternar provedor (Codex / Antigravity)")
+        toggle_prov.connect("activate", lambda _item: self._toggle_provider())
+        menu.append(toggle_prov)
         if len(self._profiles) > 1:
             account = Gtk.MenuItem.new_with_label("Alternar conta do Codex")
             account.connect("activate", lambda _item: self._next_account())
@@ -663,6 +676,7 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
         if event.button != 1:
             return False
         target = self._press_target
+        log_debug(f"Release target={target} did_drag={self._did_drag}")
         self._press_origin = None
         self._press_target = None
         if not self._did_drag:
@@ -718,11 +732,13 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
 
     def _toggle_provider(self) -> None:
         providers = {limit.provider for limit in self._all_limits}
+        log_debug(f"Toggle provider: all_limits={[(l.provider, l.name) for l in self._all_limits]}, providers={providers}")
         if len(providers) < 2:
             return
         self._active_provider = "Antigravity" if self._active_provider == "Codex" else "Codex"
         self._limits = [limit for limit in self._all_limits if limit.provider == self._active_provider]
         self._selected_limit = min(self._selected_limit, max(0, len(self._limits) - 1))
+        log_debug(f"Switched provider to: {self._active_provider}, new limits length: {len(self._limits)}")
         self.area.queue_draw()
 
     def _update_cursor(self) -> None:
@@ -907,6 +923,7 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
             results[index] = None
 
     def _finish_refresh(self, generation: int, limits: list[UsageLimit], error: bool) -> bool:
+        log_debug(f"Finish refresh: error={error}, limits={[(l.provider, l.name, l.used_percent) for l in limits]}")
         if generation != self._refresh_generation:
             return False
         self._refreshing = False
