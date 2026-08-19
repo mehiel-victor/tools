@@ -1,0 +1,14 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Usage Limit
+GenericName=Monitor de limites de uso
+Comment=Mostra limites de uso de provedores em um widget flutuante
+Exec=@EXEC@
+Icon=@ICON@
+Terminal=false
+Categories=Utility;
+Keywords=limites;uso;Codex;Antigravity;
+StartupNotify=true
+StartupWMClass=usage-limit
+X-GNOME-UsesNotifications=false

@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="512" height="512" viewBox="0 0 512 512">
+<defs>
+<linearGradient id="linear-pattern-0" gradientUnits="userSpaceOnUse" x1="0" y1="32" x2="0" y2="480">
+<stop offset="0" stop-color="rgb(28%, 28%, 28%)" stop-opacity="1"/>
+<stop offset="1" stop-color="rgb(18%, 18%, 18%)" stop-opacity="1"/>
+</linearGradient>
+<linearGradient id="linear-pattern-1" gradientUnits="userSpaceOnUse" x1="0" y1="32" x2="0" y2="480">
+<stop offset="0" stop-color="rgb(100%, 100%, 100%)" stop-opacity="0.15"/>
+<stop offset="1" stop-color="rgb(0%, 0%, 0%)" stop-opacity="0.3"/>
+</linearGradient>
+<linearGradient id="linear-pattern-2" gradientUnits="userSpaceOnUse" x1="-120" y1="-120" x2="120" y2="120" gradientTransform="matrix(0.707107, 0.707107, -0.707107, 0.707107, 256, 256)">
+<stop offset="0" stop-color="rgb(12%, 35%, 75%)" stop-opacity="1"/>
+<stop offset="1" stop-color="rgb(8%, 25%, 55%)" stop-opacity="1"/>
+</linearGradient>
+<linearGradient id="linear-pattern-3" gradientUnits="userSpaceOnUse" x1="0" y1="-170" x2="170" y2="170" gradientTransform="matrix(1, 0, 0, 1, 256, 256)">
+<stop offset="0" stop-color="rgb(30%, 65%, 95%)" stop-opacity="1"/>
+<stop offset="1" stop-color="rgb(20%, 50%, 85%)" stop-opacity="1"/>
+</linearGradient>
+</defs>
+<path fill-rule="nonzero" fill="rgb(0%, 0%, 0%)" fill-opacity="0.15" d="M 370 48 C 430.75 48 480 97.25 480 158 L 480 386 C 480 446.75 430.75 496 370 496 L 142 496 C 81.25 496 32 446.75 32 386 L 32 158 C 32 97.25 81.25 48 142 48 Z M 370 48 "/>
+<path fill-rule="nonzero" fill="rgb(0%, 0%, 0%)" fill-opacity="0.25" d="M 370 42 C 430.75 42 480 91.25 480 152 L 480 380 C 480 440.75 430.75 490 370 490 L 142 490 C 81.25 490 32 440.75 32 380 L 32 152 C 32 91.25 81.25 42 142 42 Z M 370 42 "/>
+<path fill-rule="nonzero" fill="url(#linear-pattern-0)" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter" stroke="url(#linear-pattern-1)" stroke-miterlimit="10" d="M 370 32 C 430.75 32 480 81.25 480 142 L 480 370 C 480 430.75 430.75 480 370 480 L 142 480 C 81.25 480 32 430.75 32 370 L 32 142 C 32 81.25 81.25 32 142 32 Z M 370 32 "/>
+<path fill-rule="nonzero" fill="rgb(0%, 0%, 0%)" fill-opacity="0.2" d="M 247.515625 106.09375 L 417.222656 275.800781 L 247.515625 445.507812 L 77.808594 275.800781 Z M 247.515625 106.09375 "/>
+<path fill-rule="nonzero" fill="url(#linear-pattern-2)" d="M 256 86.292969 L 425.707031 256 L 256 425.707031 L 86.292969 256 Z M 256 86.292969 "/>
+<path fill-rule="nonzero" fill="url(#linear-pattern-3)" d="M 256 426 L 256 376 L 232 370.398438 L 232 353.601562 L 256 348 L 256 320 L 232 314.398438 L 232 297.601562 L 256 292 L 256 264 L 232 258.398438 L 232 241.601562 L 256 236 L 256 208 L 232 202.398438 L 232 185.601562 L 256 180 L 256 86 L 426 256 Z M 256 426 "/>
+<path fill-rule="nonzero" fill="rgb(8%, 25%, 55%)" fill-opacity="1" stroke-width="4" stroke-linecap="butt" stroke-linejoin="miter" stroke="rgb(0%, 0%, 0%)" stroke-opacity="0.2" stroke-miterlimit="10" d="M 0 -60 C 33.136719 -60 60 -33.136719 60 0 C 60 33.136719 33.136719 60 0 60 " transform="matrix(1, 0, 0, 1, 256, 256)"/>
+</svg>

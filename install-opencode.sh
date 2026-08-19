@@ -67,7 +67,10 @@ def install(source, target, key):
 
 for source in sources:
     install(source, home / "agents" / source.name, "agents/" + source.name)
-install(src / "rules" / "OPENCODE_SUBAGENT_ROUTING.md", routing, "routing")
+opencode_routing = src / "rules" / "OPENCODE_SUBAGENT_ROUTING.md"
+if not opencode_routing.exists():
+    opencode_routing = src / "rules" / "SUBAGENT_ROUTING.md"
+install(opencode_routing, routing, "routing")
 
 block = begin + b"\n@" + str(routing).encode() + b"\n" + end
 old = instructions.read_bytes() if instructions.exists() else b""

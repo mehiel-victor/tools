@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""Always-on-top display of the Codex account usage limits."""
+"""Always-on-top display of provider usage limits."""
 
 from __future__ import annotations
 
 import fcntl
 import json
 import math
-import shutil
+import os
 import subprocess
 import threading
 import time
-import webbrowser
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from codex_features import CodexSnapshot, configured_profiles, load_snapshot, notify, scan_local_cost
+from usage_sources import UsageLimit, configured_profiles, notify, read_antigravity_limits, read_codex_limits
+
+PROVIDER_ERRORS = (OSError, ValueError, TimeoutError, json.JSONDecodeError, RuntimeError, subprocess.SubprocessError)
 
 try:
     import cairo
@@ -34,44 +35,34 @@ try:
 except (ImportError, ValueError):
     Gdk = Gio = GLib = Gtk = Pango = PangoCairo = None  # type: ignore[assignment]
 
-POSITION_FILE = Path.home() / ".codex" / "token_widget_position.json"
-LOCK_FILE = Path.home() / ".codex" / "token_widget.lock"
-REFRESH_MS = 30_000
-APP_SERVER_TIMEOUT_SECONDS = 10
-DEFAULT_CODEX_EXECUTABLE = Path("/usr/lib/chatgpt/resources/codex")
+POSITION_FILE = Path(os.environ.get("XDG_STATE_HOME", str(Path.home() / ".local" / "state"))) / "usage-limit" / "position.json"
+LEGACY_POSITION_FILE = Path.home() / ".codex" / "token_widget_position.json"
+RUNTIME_ROOT = os.environ.get("XDG_RUNTIME_DIR") or os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache"))
+LOCK_FILE = Path(RUNTIME_ROOT) / "usage-limit" / "widget.lock"
+REFRESH_MS = 5 * 60_000
 MONTHS_PT_BR = ("jan.", "fev.", "mar.", "abr.", "mai.", "jun.", "jul.", "ago.", "set.", "out.", "nov.", "dez.")
 WIDGET_SIZE = 240
-WIDGET_HEIGHT = 268
-CONTENT_OFFSET_Y = WIDGET_HEIGHT - WIDGET_SIZE
+WIDGET_HEIGHT = 300
+CONTENT_OFFSET_Y = 28
 MIN_WIDGET_SIZE = 180
 MAX_WIDGET_SIZE = 360
-PASSTHROUGH_CONTROL = (86, 15)
+PROVIDER_TOGGLE = (120, 284)
+PASSTHROUGH_CONTROL = (80, 15)
 PIN_CONTROL = (120, 15)
-RESIZE_CONTROL = (154, 15)
+RESIZE_CONTROL = (160, 15)
 CONTROL_RADIUS = 13
-
-
-@dataclass(frozen=True)
-class UsageLimit:
-    name: str
-    used_percent: int
-    resets_at: Optional[int]
-
-    @property
-    def remaining_percent(self) -> int:
-        return max(0, min(100, 100 - self.used_percent))
 
 
 @dataclass(frozen=True)
 class ThemeColors:
     background: str
-    spark_background: str
+    alternate_background: str
     track: str
     primary: str
     secondary: str
     tertiary: str
     label: str
-    spark_label: str
+    alternate_label: str
     dot_active: str
     dot_inactive: str
     control: str
@@ -103,16 +94,6 @@ def system_prefers_dark(color_scheme: str, gtk_theme: str = "", gtk_prefers_dark
     return gtk_prefers_dark or "dark" in gtk_theme.lower()
 
 
-def codex_executable() -> str:
-    """Locate the Codex binary bundled with the desktop app or on PATH."""
-    if DEFAULT_CODEX_EXECUTABLE.is_file():
-        return str(DEFAULT_CODEX_EXECUTABLE)
-    executable = shutil.which("codex")
-    if executable is None:
-        raise FileNotFoundError("Codex executable was not found")
-    return executable
-
-
 def format_reset_date(timestamp: Optional[int]) -> str:
     if timestamp is None:
         return "Renovação indisponível"
@@ -129,86 +110,28 @@ def gradient_color(start: str, end: str, progress: float) -> str:
     return f"#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}"
 
 
-def parse_rate_limits(payload: dict[str, Any]) -> list[UsageLimit]:
-    """Turn the app-server response into the limits shown in Codex settings."""
-    snapshots = payload.get("rateLimitsByLimitId") or {}
-    if not isinstance(snapshots, dict):
-        snapshots = {}
-    if not snapshots and isinstance(payload.get("rateLimits"), dict):
-        snapshots = {"codex": payload["rateLimits"]}
-
-    limits: list[UsageLimit] = []
-    for limit_id, snapshot in snapshots.items():
-        if not isinstance(snapshot, dict) or not isinstance(snapshot.get("primary"), dict):
-            continue
-        primary = snapshot["primary"]
-        used_percent = primary.get("usedPercent")
-        if not isinstance(used_percent, int):
-            continue
-        display_name = snapshot.get("limitName") or "Limites gerais de uso"
-        if limit_id == "codex":
-            display_name = "Limites gerais de uso"
-        resets_at = primary.get("resetsAt")
-        limits.append(UsageLimit(str(display_name), max(0, min(100, used_percent)), resets_at if isinstance(resets_at, int) else None))
-
-    limits.sort(key=lambda limit: limit.name != "Limites gerais de uso")
-    if not limits:
-        raise ValueError("Codex returned no usage-limit windows")
-    return limits
-
-
-def read_usage_limits(executable: Optional[str] = None) -> list[UsageLimit]:
-    """Ask the authenticated local Codex app server for account usage limits."""
-    process = subprocess.Popen(
-        [executable or codex_executable(), "app-server", "--stdio"],
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-        text=True,
-        bufsize=1,
-    )
-    if process.stdin is None or process.stdout is None:
-        raise OSError("Could not start the Codex app server")
-
-    messages = (
-        {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "codex-token-widget", "version": "1.0"}}},
-        {"jsonrpc": "2.0", "method": "initialized", "params": {}},
-        {"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": None},
-    )
-    try:
-        process.stdin.write("\n".join(json.dumps(message) for message in messages) + "\n")
-        process.stdin.flush()
-        deadline = time.monotonic() + APP_SERVER_TIMEOUT_SECONDS
-        while time.monotonic() < deadline:
-            line = process.stdout.readline()
-            if not line:
-                break
-            response = json.loads(line)
-            if response.get("id") == 2:
-                result = response.get("result")
-                if not isinstance(result, dict):
-                    raise ValueError("Codex did not return usage-limit data")
-                return parse_rate_limits(result)
-        raise TimeoutError("Timed out while loading Codex usage limits")
-    finally:
-        process.terminate()
-        try:
-            process.wait(timeout=1)
-        except subprocess.TimeoutExpired:
-            process.kill()
-
-
 def _set_color(context: Any, color: str, alpha: float = 1.0) -> None:
     red, green, blue = (int(color[index : index + 2], 16) / 255 for index in (1, 3, 5))
     context.set_source_rgba(red, green, blue, alpha)
 
 
-def _draw_text(context: Any, text: str, center_y: float, font: str, color: str) -> None:
+def _draw_text(
+    context: Any,
+    text: str,
+    center_y: float,
+    font: str,
+    color: str,
+    max_width: Optional[int] = None,
+    center_x: Optional[float] = None,
+) -> None:
     layout = PangoCairo.create_layout(context)
     layout.set_font_description(Pango.FontDescription(font))
     layout.set_text(text, -1)
+    if max_width is not None:
+        layout.set_width(max_width * Pango.SCALE)
+        layout.set_ellipsize(Pango.EllipsizeMode.END)
     width, height = layout.get_pixel_size()
-    context.move_to((WIDGET_SIZE - width) / 2, center_y - height / 2)
+    context.move_to((center_x if center_x is not None else WIDGET_SIZE / 2) - width / 2, center_y - height / 2)
     _set_color(context, color)
     PangoCairo.show_layout(context, layout)
 
@@ -262,6 +185,8 @@ def _draw_gradient_ring(context: Any, remaining_percent: int, colors: ThemeColor
 
 def control_at(x: float, y: float) -> Optional[str]:
     """Return the icon control under a point in base-widget coordinates."""
+    if abs(x - PROVIDER_TOGGLE[0]) <= 24 and abs(y - PROVIDER_TOGGLE[1]) <= 11:
+        return "provider"
     controls = (
         ("passthrough", PASSTHROUGH_CONTROL),
         ("pin", PIN_CONTROL),
@@ -291,18 +216,20 @@ def outward_resize_delta(delta_x: float, delta_y: float) -> float:
     return (delta_x * outward_x + delta_y * outward_y) / distance
 
 
-def passthrough_control_region(width: int, height: int) -> tuple[int, int, int, int]:
-    """Return the only input area retained while click-through is active."""
+def control_region(
+    center: tuple[int, int],
+    width: int,
+    height: int,
+    half_width: int = CONTROL_RADIUS + 2,
+    half_height: Optional[int] = None,
+) -> cairo.RectangleInt:
+    """Return a scaled clickable control region."""
     scale = min(width / WIDGET_SIZE, height / WIDGET_HEIGHT)
-    radius = (CONTROL_RADIUS + 2) * scale
-    center_x = PASSTHROUGH_CONTROL[0] * scale
-    center_y = PASSTHROUGH_CONTROL[1] * scale
-    return (
-        max(0, round(center_x - radius)),
-        max(0, round(center_y - radius)),
-        max(1, round(radius * 2)),
-        max(1, round(radius * 2)),
-    )
+    scaled_height = (half_height if half_height is not None else half_width) * scale
+    scaled_width = half_width * scale
+    center_x = center[0] * scale
+    center_y = center[1] * scale
+    return cairo.RectangleInt(max(0, round(center_x - scaled_width)), max(0, round(center_y - scaled_height)), max(1, round(scaled_width * 2)), max(1, round(scaled_height * 2)))
 
 
 def clamp_window_position(
@@ -401,13 +328,40 @@ def _draw_icon_control(
     context.stroke()
 
 
+def _rounded_rectangle(context: Any, x: float, y: float, width: float, height: float, radius: float) -> None:
+    radius = min(radius, width / 2, height / 2)
+    context.new_sub_path()
+    context.arc(x + width - radius, y + radius, radius, -math.pi / 2, 0)
+    context.arc(x + width - radius, y + height - radius, radius, 0, math.pi / 2)
+    context.arc(x + radius, y + height - radius, radius, math.pi / 2, math.pi)
+    context.arc(x + radius, y + radius, radius, math.pi, math.pi * 1.5)
+    context.close_path()
+
+
 def _draw_controls(
     context: Any,
     pinned: bool,
     click_through: bool,
     hovered: Optional[str],
     colors: ThemeColors,
+    active_provider: Optional[str],
+    available_providers: set[str],
 ) -> None:
+    toggle_x, toggle_y = PROVIDER_TOGGLE
+    _rounded_rectangle(context, toggle_x - 23, toggle_y - 10, 46, 20, 10)
+    toggle_hovered = hovered == "provider" and len(available_providers) > 1
+    _set_color(context, colors.control_hover if toggle_hovered else colors.control)
+    context.fill()
+    for index, provider in enumerate(("Codex", "Antigravity")):
+        left = toggle_x - 22 + index * 22
+        active = provider == active_provider
+        enabled = provider in available_providers
+        if active and enabled:
+            _set_color(context, colors.control_active)
+            _rounded_rectangle(context, left, toggle_y - 9, 22, 18, 8)
+            context.fill()
+        text_color = colors.primary if active and enabled else colors.icon if enabled else colors.tertiary
+        _draw_text(context, "C" if index == 0 else "A", toggle_y, "Sans Bold 8", text_color, center_x=left + 11)
     _draw_icon_control(context, "passthrough", PASSTHROUGH_CONTROL, click_through, hovered == "passthrough", colors)
     _draw_icon_control(context, "pin", PIN_CONTROL, pinned, hovered == "pin", colors)
     _draw_icon_control(context, "resize", RESIZE_CONTROL, False, hovered == "resize", colors)
@@ -422,7 +376,8 @@ def draw_widget(
     hovered_control: Optional[str] = None,
     click_through: bool = False,
     dark_mode: bool = True,
-    status_text: Optional[str] = None,
+    active_provider: Optional[str] = None,
+    available_providers: Optional[set[str]] = None,
 ) -> None:
     """Render the complete circular widget on a Cairo context."""
     colors = theme_colors(dark_mode)
@@ -441,8 +396,11 @@ def draw_widget(
     context.fill()
 
     selected_limit = limits[selected] if limits and not error else None
-    is_spark = selected_limit is not None and selected_limit.name != "Limites gerais de uso"
-    _set_color(context, colors.spark_background if is_spark else colors.background)
+    is_alternate = selected_limit is not None and selected_limit.window != "session"
+    _set_color(
+        context,
+        colors.alternate_background if is_alternate else colors.background,
+    )
     context.arc(120, 120, 112, 0, math.tau)
     context.fill()
 
@@ -451,16 +409,25 @@ def draw_widget(
         _draw_text(context, "Não foi possível atualizar", 139, "Sans 9", colors.secondary)
         _draw_text(context, "Clique para tentar novamente", 163, "Sans 8", colors.tertiary)
         context.restore()
-        _draw_controls(context, pinned, click_through, hovered_control, colors)
+        _draw_controls(context, pinned, click_through, hovered_control, colors, active_provider, available_providers or set())
         return
 
     limit = limits[selected]
-    label = "GERAL" if not is_spark else limit.name.removesuffix(" · sessão").removesuffix(" · semanal").upper()
+    window_label = {"session": "sessão", "weekly": "semanal", "5h": "5 horas"}.get(limit.window, limit.window)
     _draw_gradient_ring(context, limit.remaining_percent, colors)
-    _draw_text(context, label, 67, "Sans Bold 8", colors.spark_label if is_spark else colors.label)
+    label_color = colors.alternate_label if is_alternate else colors.label
+    _draw_text(context, limit.provider, 61, "Sans Bold 8", label_color, 190)
+    _draw_text(
+        context,
+        f"{limit.name} · {window_label}",
+        73,
+        "Sans 7",
+        label_color,
+        200,
+    )
     _draw_text(context, f"{limit.remaining_percent}%", 111, "Sans Bold 26", colors.primary)
     _draw_text(context, "restante", 137, "Sans 8", colors.secondary)
-    _draw_text(context, status_text or format_reset_date(limit.resets_at), 163, "Sans 7", colors.tertiary)
+    _draw_text(context, format_reset_date(limit.resets_at), 163, "Sans 7", colors.tertiary)
 
     dot_gap = 10
     start_x = 120 - (len(limits) - 1) * dot_gap / 2
@@ -470,19 +437,22 @@ def draw_widget(
         context.fill()
 
     context.restore()
-    _draw_controls(context, pinned, click_through, hovered_control, colors)
+    _draw_controls(context, pinned, click_through, hovered_control, colors, active_provider, available_providers or set())
 
 
-class TokenWidget(Gtk.Window if Gtk is not None else object):
+class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
     def __init__(self, application: Any = None):
         super().__init__(type=Gtk.WindowType.TOPLEVEL)
         if application is not None:
             self.set_application(application)
         self._position_file = POSITION_FILE
+        self._all_limits: list[UsageLimit] = []
         self._limits: list[UsageLimit] = []
+        self._active_provider: Optional[str] = None
         self._selected_limit = 0
         self._error = False
         self._refreshing = False
+        self._refresh_generation = 0
         self._press_origin: Optional[tuple[float, float]] = None
         self._press_target: Optional[str] = None
         self._resize_start_size = WIDGET_SIZE
@@ -496,13 +466,11 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         self._visibility_check_pending = False
         self._widget_size = WIDGET_SIZE
         self._minimized = False
-        self._snapshot: Optional[CodexSnapshot] = None
-        self._cost = None
         self._profiles = configured_profiles()
         self._profile_index = 0
 
-        self.set_title("Codex Token Widget")
-        self.set_icon_name("codex-token-widget")
+        self.set_title("Usage Limit")
+        self.set_icon_name("usage-limit")
         self.set_default_size(WIDGET_SIZE, WIDGET_HEIGHT)
         self.set_size_request(MIN_WIDGET_SIZE, widget_height(MIN_WIDGET_SIZE))
         self.set_resizable(True)
@@ -545,8 +513,12 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         GLib.timeout_add_seconds(2, self._maintain_window_layer)
 
     def _render_limits(self, limits: list[UsageLimit]) -> None:
-        self._limits = limits
-        self._selected_limit = min(self._selected_limit, len(limits) - 1)
+        self._all_limits = limits
+        providers = {limit.provider for limit in limits}
+        if self._active_provider not in providers:
+            self._active_provider = next((provider for provider in ("Codex", "Antigravity") if provider in providers), None)
+        self._limits = [limit for limit in limits if limit.provider == self._active_provider]
+        self._selected_limit = max(0, min(self._selected_limit, len(self._limits) - 1))
         self._error = False
         self.area.queue_draw()
 
@@ -564,19 +536,11 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
             self._hovered_control,
             self._click_through,
             self._dark_mode,
-            self._status_text(),
+            self._active_provider,
+            {limit.provider for limit in self._all_limits},
         )
         context.restore()
         return False
-
-    def _status_text(self) -> Optional[str]:
-        if self._snapshot is None:
-            return None
-        if self._snapshot.credits.unlimited:
-            return "Créditos ilimitados"
-        if self._snapshot.credits.available and self._snapshot.credits.balance is not None:
-            return f"Créditos: {self._snapshot.credits.balance:g}"
-        return None
 
     def _base_point(self, x: float, y: float) -> tuple[float, float]:
         allocation = self.area.get_allocation()
@@ -648,15 +612,10 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         refresh = Gtk.MenuItem.new_with_label("Atualizar agora")
         refresh.connect("activate", lambda _item: self.refresh())
         menu.append(refresh)
-        account = Gtk.MenuItem.new_with_label("Alternar conta")
-        account.connect("activate", lambda _item: self._next_account())
-        menu.append(account)
-        costs = Gtk.MenuItem.new_with_label("Mostrar custo local")
-        costs.connect("activate", lambda _item: self._show_cost())
-        menu.append(costs)
-        dashboard = Gtk.MenuItem.new_with_label("Abrir painel do Codex")
-        dashboard.connect("activate", lambda _item: webbrowser.open("https://chatgpt.com/codex/settings/usage"))
-        menu.append(dashboard)
+        if len(self._profiles) > 1:
+            account = Gtk.MenuItem.new_with_label("Alternar conta do Codex")
+            account.connect("activate", lambda _item: self._next_account())
+            menu.append(account)
         menu.append(Gtk.SeparatorMenuItem())
         minimize = Gtk.MenuItem.new_with_label("Minimizar")
         minimize.connect("activate", lambda _item: self._minimize())
@@ -670,18 +629,10 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
 
     def _next_account(self) -> None:
         self._profile_index = (self._profile_index + 1) % len(self._profiles)
+        self._all_limits = []
         self._limits = []
         self._error = False
-        self.refresh()
-
-    def _show_cost(self) -> None:
-        if self._cost is None:
-            return
-        summary = self._cost
-        notify(
-            "Custo local do Codex",
-            f"{summary.days} dias · {summary.input_tokens + summary.output_tokens:,} tokens · estimado ${summary.estimated_cost:.2f}",
-        )
+        self.refresh(force=True)
 
     def _on_motion(self, _area: Any, event: Any) -> bool:
         if self._press_origin and self._press_target == "resize":
@@ -715,7 +666,9 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         self._press_origin = None
         self._press_target = None
         if not self._did_drag:
-            if target == "pin":
+            if target == "provider":
+                self._toggle_provider()
+            elif target == "pin":
                 self._pinned = not self._pinned
                 self._apply_window_layer()
                 self.area.queue_draw()
@@ -741,28 +694,43 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
 
     def _on_tooltip(self, _area: Any, x: int, y: int, _keyboard_mode: bool, tooltip: Any) -> bool:
         target = control_at(*self._base_point(x, y))
-        if target == "pin":
+        if target == "provider":
+            providers = {limit.provider for limit in self._all_limits}
+            if len(providers) < 2:
+                if len(providers) == 1:
+                    tooltip.set_text(f"Apenas {next(iter(providers))} está disponível")
+                else:
+                    tooltip.set_text(
+                        "Provedores indisponíveis" if self._error else "Carregando provedores"
+                    )
+            else:
+                next_provider = "Antigravity" if self._active_provider == "Codex" else "Codex"
+                tooltip.set_text(f"Mostrar limites do {next_provider}")
+        elif target == "pin":
             tooltip.set_text("Desfixar da tela" if self._pinned else "Fixar na tela")
         elif target == "passthrough":
             tooltip.set_text("Desativar modo intangível" if self._click_through else "Ativar modo intangível")
         elif target == "resize":
             tooltip.set_text("Arraste para redimensionar")
         else:
-            if self._snapshot is None:
-                return False
-            account = self._snapshot.account_email or "Conta atual"
-            plan = f" · {self._snapshot.plan}" if self._snapshot.plan else ""
-            cost = ""
-            if self._cost is not None:
-                cost = f"\nCusto local (30d): ${self._cost.estimated_cost:.2f}"
-            tooltip.set_text(f"{account}{plan}{cost}\nClique para alternar limites")
+            tooltip.set_text("Limites de uso por provedor\nClique para alternar janelas")
         return True
+
+    def _toggle_provider(self) -> None:
+        providers = {limit.provider for limit in self._all_limits}
+        if len(providers) < 2:
+            return
+        self._active_provider = "Antigravity" if self._active_provider == "Codex" else "Codex"
+        self._limits = [limit for limit in self._all_limits if limit.provider == self._active_provider]
+        self._selected_limit = min(self._selected_limit, max(0, len(self._limits) - 1))
+        self.area.queue_draw()
 
     def _update_cursor(self) -> None:
         window = self.area.get_window()
         if window is None:
             return
-        cursor_name = "ne-resize" if self._hovered_control == "resize" else "pointer" if self._hovered_control else "default"
+        provider_disabled = self._hovered_control == "provider" and len({limit.provider for limit in self._all_limits}) < 2
+        cursor_name = "ne-resize" if self._hovered_control == "resize" else "pointer" if self._hovered_control and not provider_disabled else "default"
         window.set_cursor(Gdk.Cursor.new_from_name(self.get_display(), cursor_name))
 
     def _on_key(self, _widget: Any, event: Any) -> bool:
@@ -857,8 +825,8 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
             full_region = cairo.Region(cairo.RectangleInt(0, 0, allocation.width, allocation.height))
             window.input_shape_combine_region(full_region, 0, 0)
             return False
-        x, y, width, height = passthrough_control_region(allocation.width, allocation.height)
-        region = cairo.Region(cairo.RectangleInt(x, y, width, height))
+        region = cairo.Region(control_region(PASSTHROUGH_CONTROL, allocation.width, allocation.height))
+        region.union(cairo.Region(control_region(PROVIDER_TOGGLE, allocation.width, allocation.height, 24, 11)))
         window.input_shape_combine_region(region, 0, 0)
         return False
 
@@ -868,8 +836,9 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         return True
 
     def _restore_position(self) -> None:
+        position_file = POSITION_FILE if POSITION_FILE.is_file() else LEGACY_POSITION_FILE
         try:
-            position = json.loads(self._position_file.read_text(encoding="utf-8"))
+            position = json.loads(position_file.read_text(encoding="utf-8"))
             self._widget_size = clamp_widget_size(position.get("size", WIDGET_SIZE))
             self._pinned = bool(position.get("pinned", True))
             self._click_through = bool(position.get("click_through", False))
@@ -901,32 +870,56 @@ class TokenWidget(Gtk.Window if Gtk is not None else object):
         except OSError:
             pass
 
-    def refresh(self) -> None:
-        if self._refreshing:
+    def refresh(self, force: bool = False) -> None:
+        if self._refreshing and not force:
             return
+        self._refresh_generation += 1
+        generation = self._refresh_generation
+        home = self._profiles[self._profile_index]["home"]
         self._refreshing = True
-        threading.Thread(target=self._load_limits, daemon=True).start()
+        threading.Thread(target=self._load_limits, args=(home, generation), daemon=True).start()
 
-    def _load_limits(self) -> None:
+    def _load_limits(self, home: str, generation: int) -> None:
         try:
-            profile = self._profiles[self._profile_index]
-            snapshot = load_snapshot(profile["home"])
-            limits = [UsageLimit(item.name, item.used_percent, item.resets_at) for item in snapshot.windows]
-            cost = scan_local_cost(profile["home"])
-            GLib.idle_add(self._finish_refresh, limits, False, snapshot, cost)
-        except (OSError, ValueError, TimeoutError, json.JSONDecodeError):
-            GLib.idle_add(self._finish_refresh, [], True, None, None)
+            results: list[Optional[list[UsageLimit]]] = [None, None]
+            workers = [
+                threading.Thread(target=self._collect_source, args=(lambda: read_codex_limits(home), results, 0), daemon=True),
+                threading.Thread(target=self._collect_source, args=(read_antigravity_limits, results, 1), daemon=True),
+            ]
+            for worker in workers:
+                worker.start()
+            deadline = time.monotonic() + 40
+            for worker in workers:
+                worker.join(max(0, deadline - time.monotonic()))
+            limits = [item for result in results if result for item in result]
+            if not limits:
+                if any(worker.is_alive() for worker in workers):
+                    raise TimeoutError("Timed out while loading usage limits")
+                raise ValueError("No usage limits available")
+            GLib.idle_add(self._finish_refresh, generation, limits, False)
+        except PROVIDER_ERRORS:
+            GLib.idle_add(self._finish_refresh, generation, [], True)
 
-    def _finish_refresh(self, limits: list[UsageLimit], error: bool, snapshot: Optional[CodexSnapshot] = None, cost: Any = None) -> bool:
+    def _collect_source(self, source: Any, results: list[Optional[list[UsageLimit]]], index: int) -> None:
+        try:
+            results[index] = source()
+        except PROVIDER_ERRORS:
+            results[index] = None
+
+    def _finish_refresh(self, generation: int, limits: list[UsageLimit], error: bool) -> bool:
+        if generation != self._refresh_generation:
+            return False
         self._refreshing = False
         self._error = error
         if not error:
-            self._snapshot = snapshot
-            self._cost = cost
-            if snapshot and any(item.remaining_percent <= 20 for item in snapshot.windows):
-                notify("Limite do Codex próximo do fim", "Uma das janelas de uso está com 20% ou menos restante.")
+            if any(item.remaining_percent <= 20 for item in limits):
+                notify("Usage Limit", "Uma janela de uso está com 20% ou menos restante.")
             self._render_limits(limits)
         else:
+            self._all_limits = []
+            self._limits = []
+            self._active_provider = None
+            self._selected_limit = 0
             self.area.queue_draw()
         return False
 
@@ -949,17 +942,17 @@ def main() -> None:
         fcntl.flock(instance_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError:
         return
-    GLib.set_prgname("codex-token-widget")
-    Gdk.set_program_class("codex-token-widget")
-    Gtk.Window.set_default_icon_name("codex-token-widget")
+    GLib.set_prgname("usage-limit")
+    Gdk.set_program_class("usage-limit")
+    Gtk.Window.set_default_icon_name("usage-limit")
     application = Gtk.Application(
-        application_id="io.github.mehiel.CodexTokenWidget",
+        application_id="io.github.mehiel.UsageLimit",
         flags=Gio.ApplicationFlags.FLAGS_NONE,
     )
 
     def activate(app: Any) -> None:
         windows = app.get_windows()
-        widget = windows[0] if windows else TokenWidget(app)
+        widget = windows[0] if windows else UsageLimitWidget(app)
         widget.show_all()
         widget.present()
 

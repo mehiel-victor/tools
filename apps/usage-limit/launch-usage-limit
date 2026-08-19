@@ -2,4 +2,4 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 export GDK_BACKEND="${GDK_BACKEND:-x11}"
-exec "$(dirname "$0")/../usage-limit/launch-usage-limit" "$@"
+exec python3 usage_limit_widget.py "$@"
