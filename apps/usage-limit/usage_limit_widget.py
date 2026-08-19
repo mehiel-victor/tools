@@ -78,6 +78,7 @@ class ThemeColors:
     control_active: str
     control_active_hover: str
     icon: str
+    active_icon: str
 
 
 def theme_colors(dark_mode: bool) -> ThemeColors:
@@ -85,11 +86,19 @@ def theme_colors(dark_mode: bool) -> ThemeColors:
     if dark_mode:
         return ThemeColors(
             "#121212", "#1C191E", "#2C2C2C", "#F7F9FC", "#B8C0CD", "#8E98A7", "#8FB6D0", "#B9B2C0",
-            "#D8DEE8", "#4B5361", "#242424", "#333333", "#2B3C30", "#354A3B", "#AAB3C1",
+            "#D8DEE8", "#4B5361", "#242424", "#333333", "#2B3C30", "#354A3B", "#AAB3C1", "#81C995",
         )
     return ThemeColors(
         "#F7F7F5", "#F0EFF2", "#D9DDD9", "#202124", "#4F5551", "#676D69", "#456C84", "#635E68",
-        "#343936", "#AEB5B0", "#ECEEEC", "#DEE2DF", "#DDEEE1", "#D0E7D5", "#555D58",
+        "#343936", "#AEB5B0", "#ECEEEC", "#DEE2DF", "#DDEEE1", "#D0E7D5", "#555D58", "#4E9B61",
+    )
+
+
+def critical_colors(colors: ThemeColors) -> ThemeColors:
+    """Return a red version of the full interface for the critical pulse."""
+    return ThemeColors(
+        "#2B1012", "#3A171B", "#5B2A2E", "#FFE8E8", "#FFC2C2", "#FF9A9A", "#FF8A8A", "#FFB3B3",
+        "#FFB0B0", "#7A3B40", "#572126", "#6C2830", "#822F38", "#FFD1D1", "#FFB0B0", "#FFB0B0",
     )
 
 
@@ -163,7 +172,7 @@ def usage_palette(remaining_percent: int) -> tuple[str, str, str]:
     return palettes[usage_level(remaining_percent)]
 
 
-def _draw_gradient_ring(context: Any, remaining_percent: int, colors: ThemeColors) -> None:
+def _draw_gradient_ring(context: Any, remaining_percent: int, colors: ThemeColors, critical: bool = False) -> None:
     center = WIDGET_SIZE / 2
     radius = 106
     line_width = 20
@@ -178,7 +187,10 @@ def _draw_gradient_ring(context: Any, remaining_percent: int, colors: ThemeColor
     if fraction == 0:
         return
 
-    start_color, middle_color, end_color = usage_palette(remaining_percent)
+    if critical:
+        start_color, middle_color, end_color = ("#FFB3B3", "#FF3B30", "#B00020")
+    else:
+        start_color, middle_color, end_color = usage_palette(remaining_percent)
     gradient = cairo.LinearGradient(22, 22, 218, 218)
     for offset, color in ((0.0, start_color), (0.5, middle_color), (1.0, end_color)):
         red, green, blue = (int(color[index : index + 2], 16) / 255 for index in (1, 3, 5))
@@ -297,7 +309,7 @@ def _draw_icon_control(
     context.arc(x, y, 11, 0, math.tau)
     context.fill()
 
-    _set_color(context, "#81C995" if active else colors.icon)
+    _set_color(context, colors.active_icon if active else colors.icon)
     context.set_line_width(1.45)
     context.set_line_cap(cairo.LINE_CAP_ROUND)
     context.set_line_join(cairo.LINE_JOIN_ROUND)
@@ -386,9 +398,13 @@ def draw_widget(
     dark_mode: bool = True,
     active_provider: Optional[str] = None,
     available_providers: Optional[set[str]] = None,
+    critical_pulse: bool = False,
 ) -> None:
     """Render the complete circular widget on a Cairo context."""
     colors = theme_colors(dark_mode)
+    critical = bool(limits) and critical_pulse
+    if critical:
+        colors = critical_colors(colors)
     context.set_antialias(cairo.ANTIALIAS_BEST)
     context.set_operator(cairo.OPERATOR_CLEAR)
     context.paint()
@@ -422,7 +438,7 @@ def draw_widget(
 
     limit = limits[selected]
     window_label = {"session": "sessão", "weekly": "semanal", "5h": "5 horas"}.get(limit.window, limit.window)
-    _draw_gradient_ring(context, limit.remaining_percent, colors)
+    _draw_gradient_ring(context, limit.remaining_percent, colors, critical)
     label_color = colors.alternate_label if is_alternate else colors.label
     _draw_text(context, limit.provider, 61, "Sans Bold 8", label_color, 190)
     _draw_text(
@@ -459,6 +475,7 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
         self._active_provider: Optional[str] = None
         self._selected_limit = 0
         self._error = False
+        self._critical_phase = False
         self._refreshing = False
         self._refresh_generation = 0
         self._press_origin: Optional[tuple[float, float]] = None
@@ -519,6 +536,7 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
         self.refresh()
         GLib.timeout_add_seconds(REFRESH_MS // 1000, self._scheduled_refresh)
         GLib.timeout_add_seconds(2, self._maintain_window_layer)
+        GLib.timeout_add(450, self._critical_blink)
 
     def _render_limits(self, limits: list[UsageLimit]) -> None:
         self._all_limits = limits
@@ -528,6 +546,7 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
         self._limits = [limit for limit in limits if limit.provider == self._active_provider]
         self._selected_limit = max(0, min(self._selected_limit, len(self._limits) - 1))
         self._error = False
+        self._critical_phase = False
         self.area.queue_draw()
 
     def _on_draw(self, _area: Any, context: Any) -> bool:
@@ -546,9 +565,23 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
             self._dark_mode,
             self._active_provider,
             {limit.provider for limit in self._all_limits},
+            self._critical_phase and self._has_critical_limit(),
         )
         context.restore()
         return False
+
+    def _has_critical_limit(self) -> bool:
+        return any(limit.remaining_percent <= 20 for limit in self._all_limits)
+
+    def _critical_blink(self) -> bool:
+        if self._error or not self._has_critical_limit():
+            if self._critical_phase:
+                self._critical_phase = False
+                self.area.queue_draw()
+            return True
+        self._critical_phase = not self._critical_phase
+        self.area.queue_draw()
+        return True
 
     def _base_point(self, x: float, y: float) -> tuple[float, float]:
         allocation = self.area.get_allocation()
@@ -919,7 +952,13 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
     def _collect_source(self, source: Any, results: list[Optional[list[UsageLimit]]], index: int) -> None:
         try:
             results[index] = source()
-        except PROVIDER_ERRORS:
+        except PROVIDER_ERRORS as e:
+            import traceback
+            import subprocess
+            err_msg = f"Source {index} failed with exception: {e}\n{traceback.format_exc()}"
+            if isinstance(e, subprocess.TimeoutExpired):
+                err_msg += f"\nStdout: {e.stdout}\nStderr: {e.stderr}"
+            log_debug(err_msg)
             results[index] = None
 
     def _finish_refresh(self, generation: int, limits: list[UsageLimit], error: bool) -> bool:
@@ -937,6 +976,7 @@ class UsageLimitWidget(Gtk.Window if Gtk is not None else object):
             self._limits = []
             self._active_provider = None
             self._selected_limit = 0
+            self._critical_phase = False
             self.area.queue_draw()
         return False
 
