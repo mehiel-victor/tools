@@ -30,10 +30,10 @@ Use the exact agent name when delegating work.
 
 | Agent | Model / effort | Primary responsibility |
 | --- | --- | --- |
-| `code-explorer` | GPT-5.6 Luna / low | Read-only repository discovery and decision-ready findings. |
-| `quick-implementer` | GPT-5.6 Luna / low | Small, well-scoped one- or two-file changes with focused checks. |
-| `implementer` | GPT-5.6 Luna / medium | Features and bug fixes, including targeted unit tests. |
-| `code-validator` | GPT-5.4 Mini / low | Read-only, focused test, build, lint, or type-check verification. |
+| `code-explorer` | GPT-5.6 Luna / low | Heavy read-only repository scans as one cohesive 5-to-6-task phase. |
+| `quick-implementer` | GPT-5.6 Luna / low | Compatibility-only; quick self-contained work stays in the orchestrator. |
+| `implementer` | GPT-5.6 Luna / medium | Substantial cohesive implementation phases with proportionate non-test validation. |
+| `code-validator` | GPT-5.4 Mini / low | Independently substantial 5-to-6-check non-test validation phases. |
 | `code-reviewer` | GPT-5.6 Sol / low | Read-only review for high-risk, public-API, or difficult changes. |
 | `commit-pusher` | GPT-5.6 Luna / low | Intentional staging, conventional commit, and push—only on explicit request. |
 
@@ -45,14 +45,13 @@ bounded work; they share the same workspace and must preserve unrelated edits.
 ```mermaid
 flowchart TD
     U[User request] --> O[Orchestrator]
-    O -->|Clarify scope and choose role| D{Work needed?}
-    D -->|Repository discovery| E[code-explorer]
+    O -->|Group work into logical phases| D{Cohesive 5-6 task phase?}
+    D -->|No: compact or tightly coupled| O
+    D -->|Heavy repository scan| E[code-explorer]
     E -->|Findings and risks| O
-    D -->|Small change| Q[quick-implementer]
-    D -->|Feature or bug fix| I[implementer]
-    Q -->|Change and focused check| O
-    I -->|Change and affected-test manifest| O
-    O -->|Targeted validation| V[code-validator]
+    D -->|Substantial implementation| I[implementer]
+    I -->|Change and proportionate validation| O
+    O -->|Substantial independent validation| V[code-validator]
     V -->|Pass or actionable failure| O
     O -->|High-risk review when warranted| R[code-reviewer]
     R -->|Findings| O
@@ -61,14 +60,16 @@ flowchart TD
     O --> F[Completed response]
 ```
 
-In brief, exploration and bounded implementation are delegated by default;
-validation is separate from implementation; review is for high-risk or
-difficult-to-validate changes; and commit/push is only used when explicitly
-requested.
+The orchestrator is the default owner. Use at most three subagents across the
+entire task and give each one cohesive block of five to six meaningful tasks.
+Heavy scans are delegated; quick self-contained refactors and smaller blocks
+stay in the orchestrator. Validation and review are separate only when they are
+independently substantial enough to satisfy the same block rule. Subagents never
+spawn other agents.
 
-The toolkit forbids test-driven development and test-first workflows. Agents
-implement the functional change first, then add or update the relevant automated
-coverage and run focused validation.
+The toolkit does not create, update, or run automated tests. Validation uses
+applicable non-test checks such as builds, type checks, linting, formatting,
+static analysis, configuration validation, and focused manual inspection.
 
 ## Prerequisites and configuration
 
@@ -107,16 +108,18 @@ standards and routing rules, and adds a managed import block to
 `$CODEX_HOME/AGENTS.md`. It also runs Impeccable's
 official non-interactive installer for the Codex provider at
 `$HOME/.agents/skills/impeccable`. Project hooks are not enabled globally; use
-`$impeccable hooks on` inside a frontend project when desired. It enables
-`[features.multi_agent_v2]` with `hide_spawn_agent_metadata = false` and
-`tool_namespace = "agents"` only when that table is not already defined.
+`$impeccable hooks on` inside a frontend project when desired. It adds
+`[features.multi_agent_v2]` defaults and an `[agents]` table with
+`enabled = true` and `max_concurrent_threads_per_session = 3` when those tables
+are not already defined.
 Existing files are backed up before being replaced or modified. A state manifest
 at `$CODEX_HOME/.subagents_configs-state.json` records ownership and hashes.
 
 Re-running is safe: unchanged managed files remain unchanged, and stale package
 files are removed or restored only when their installed bytes still match the
 recorded hash. User-modified files are preserved. The installer does not rewrite
-an existing multi-agent feature table.
+an existing multi-agent feature or agents table; it reports a warning when an
+existing agents table does not match the toolkit's enabled/three-thread defaults.
 
 ## Uninstall
 
@@ -176,8 +179,9 @@ repository skills into `$CODEX_HOME/skills`, install Impeccable with
 `npm exec --yes -- impeccable install -y --providers=codex --scope=global --no-hooks`,
 copy `AGENTS.md` and the routing rules into `$CODEX_HOME`, and add the
 absolute-path imports shown in `templates/AGENTS.md.template` to
-`$CODEX_HOME/AGENTS.md`. Ensure the multi-agent feature table is present in
-`$CODEX_HOME/config.toml` if your Codex installation requires it.
+`$CODEX_HOME/AGENTS.md`. Ensure the multi-agent feature table and an `[agents]`
+table with `enabled = true` and `max_concurrent_threads_per_session = 3` are
+present in `$CODEX_HOME/config.toml`.
 
 After installation, verify the output reports `TOML validation passed` (or the
 documented validation skip), inspect the installed files under `$CODEX_HOME`,

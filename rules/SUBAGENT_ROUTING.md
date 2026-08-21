@@ -1,37 +1,54 @@
 # Subagent Routing
 
-Optimize first for correctness, simplicity, testability, and maintainability. Treat cost and latency as secondary constraints. Delegate when a specialized agent improves evidence quality, isolates context, or creates meaningful independent review; do not delegate merely because a cheaper model exists. The parent retains responsibility for ensuring that all work follows `ENGINEERING_STANDARDS.md`.
+Optimize for execution quality, context efficiency, cost, and wall-clock time. The main agent is the default owner of the work. Group related work into logical phases; never fragment a request into one agent per microtask.
 
-At the start of a broad task, identify separable workstreams and delegate only bounded, non-overlapping slices with explicit ownership. Reassess after significant checkpoints. Keep tightly coupled work local when delegation would duplicate discovery, obscure architectural decisions, or create integration risk.
+## Hard Limits
 
-The parent agent retains ownership of architectural decisions, experiment selection, integration, and concise final validation. Delegate bounded workstreams, not the overall objective. Keep tightly coupled experiment-selection loops in the parent; delegate experiment execution or result analysis when independently separable. Every delegated implementation task must have explicit, non-overlapping file or module ownership; agents share the workspace, must preserve unrelated edits, and must accommodate concurrent changes.
+- Use at most 3 subagents across the entire user task, including explorers, implementers, validators, reviewers, and publishing agents. This is a total task limit, not a target to fill.
+- Assign each subagent exactly one cohesive block containing 5 to 6 meaningful tasks. Meaningful tasks are investigations, file or module groups, implementation outcomes, validation checks, or deliverables—not individual shell commands.
+- The 5 to 6 tasks in a block MUST share one goal, one working context, and one decision-ready output. Never pad a block with artificial tasks merely to reach the minimum.
+- If fewer than 5 cohesive tasks can be formed, keep the work in the main agent.
+- Never create one agent per file, endpoint, test, check, finding, or small edit.
+- Subagents MUST NOT spawn or delegate to additional agents. They complete their assigned block themselves and return one concise report.
+- Reuse the same subagent with a follow-up when its existing context and ownership remain relevant; do not create a replacement agent for the next microstep.
 
-Execute directly only for truly trivial operations where agent startup would exceed the work: a single known-line edit, one short command, or a factual response. Do not delegate trivial conversation. The parent may run ordinary commands needed for routing, integration, or concise final verification, but should delegate repository execution rather than handling substantial discovery, implementation, conflict resolution, or review itself. A slow command alone is not a reason to delegate runner work; use an execution agent when diagnosis, output analysis, or independent parallel execution is substantial.
+## Main-Agent Ownership
 
-When delegation is justified:
+The main agent retains requirements, architecture, task decomposition, decisions, integration, conflict resolution, and final validation. It MUST directly handle:
 
-- Use `fork_turns="none"` unless parent conversation context is genuinely required.
-- Prefer one subagent per task. Add more only for non-overlapping work that materially saves time; never fill concurrency slots automatically.
-- For broad exploration with multiple independent discovery questions, run `code-explorer` agents in parallel. Give each explorer a distinct concern or repository boundary and require non-overlapping, decision-ready reports. Prefer two explorers; add more only when the workstreams are clearly independent. Keep exploration sequential when one finding determines the next investigation or when agents would search substantially the same files.
-- Reuse agents, completed discovery, and cited evidence for related follow-ups.
-- Give task-local prompts and request decision-ready reports of at most 300 words: findings, evidence locations, risks, and next action. Exclude narration, raw dumps, and repeated context.
-- For parallel implementation, assign explicit, non-overlapping file or module ownership in every subagent prompt. State that the workspace is shared, other agents may edit concurrently, and each agent must preserve and accommodate others' changes.
-- Trust cited findings unless verification is necessary. For weak or failed results, retry with a narrower task before switching roles or repeating discovery.
-- Detach behavioral verification from `implementer` by default. After implementation and cheap structural checks, keep the original implementer available and delegate focused test, build, lint, or type-check scopes to `code-validator`. Build a complete affected-test manifest from every added or changed test file plus directly affected existing tests. Every validator prompt must state the exact targeted command, assigned manifest entries, scope, and concurrency plan. Run all manifest entries with test-file, test-class, package, or equivalent selectors instead of substituting a whole-suite command; for example, use Gradle `test --tests ...` selectors. Prefer one validator using up to three test-runner workers when supported and concurrency-safe. Otherwise partition the complete manifest across up to three `code-validator` agents with distinct, non-overlapping shards; each shard may contain multiple test selectors. Three limits concurrent workers or agents, not the number of affected tests that must run. Do not parallelize commands that share mutable databases, fixtures, snapshots, generated files, ports, caches, or coverage outputs unless those resources are isolated.
-- When every affected unit-test manifest entry passes, do not rerun the global unit-test suite by default. Treat integration and end-to-end validation as separate scopes only when explicitly required by the task or a later routing policy. The parent classifies validator failures before requesting repairs. Consolidate likely implementation failures and resume the same implementer with `followup_task` so it retains its context and file ownership, then send the affected checks back to a validator. Prefer no more than two repair cycles before escalating unresolved, flaky, environmental, or contract-level failures.
-- For a truly trivial change with one fast and obvious check, `quick-implementer` may validate directly instead of spawning a validator.
+- Quick, self-contained refactors.
+- Small or localized edits, including one- or two-file changes.
+- Tightly coupled investigation and implementation loops.
+- Routine commands, focused checks, and concise final verification.
+- Any work that cannot be grouped into a substantial 5-to-6-task subagent block.
 
-Every implementation assignment must require the smallest viable change, affected-test coverage, compatibility with existing contracts, no unauthorized dependencies or TODO markers, and an explicit validation manifest. Test-driven development and test-first workflows must never be used. Bug-fix regression tests must be written only after the functional implementation is complete. Validation failures must be reported rather than bypassed or hidden.
+Do not automatically split implementation, validation, and review among separate agents. The agent that owns a cohesive phase should complete that phase, including proportionate validation, unless a later phase is independently substantial enough to satisfy the same 5-to-6-task rule.
 
-Select custom agents by their exact `name` from `~/.codex/agents`:
+## When to Delegate
 
-- Broad repository discovery, contract or data-flow tracing -> `code-explorer`
-- Mechanical one- or two-file change -> `quick-implementer`
-- Multi-file behavior change, debugging, or substantial tests -> `implementer`
-- Focused read-only test, build, lint, or type-check execution -> `code-validator`
+- Heavy codebase scanning MUST be delegated to one `code-explorer` with a 5-to-6-task exploration block, such as mapping entry points, tracing contracts, locating callers, finding existing patterns, identifying relevant validation surfaces, and reporting risks.
+- Delegate implementation only when it forms a substantial, cohesive phase of 5 to 6 tasks with explicit, non-overlapping file or module ownership.
+- Delegate validation or review only when it is independently substantial, high-risk, or evidence-heavy and can be expressed as 5 to 6 cohesive checks. Otherwise the main agent performs it.
+- Use parallel subagents only for genuinely independent phases with non-overlapping context and ownership. Prefer sequential reuse when one result determines the next action.
+- Avoid parallel write-heavy delegation. Shared-workspace agents must preserve unrelated user changes and accommodate concurrent edits.
+
+## Orchestration
+
+1. Group the request into logical phases before deciding whether to delegate.
+2. Keep compact or tightly coupled phases in the main agent.
+3. For each delegated phase, provide 5 to 6 explicit tasks, a clear boundary, expected evidence, and a single output format.
+4. Request a decision-ready report of at most 300 words: conclusion, evidence locations, risks, and next action. Exclude narration and raw dumps.
+5. Integrate results in the main agent. Do not create extra agents merely to summarize, relay, or re-check another agent's output.
+
+## Custom Agent Selection
+
+Select custom agents by exact `name` from `~/.codex/agents` only when the delegation rules above are satisfied:
+
+- Heavy repository discovery, contract tracing, or data-flow mapping -> `code-explorer`
+- Substantial cohesive implementation phase -> `implementer`
+- Substantial focused non-test validation phase -> `code-validator`
 - Independent review only for high-risk, security-sensitive, architectural, public-API, migration, concurrency, or difficult-to-validate changes -> `code-reviewer`
-- Commit and push, only when the user explicitly requests both -> `commit-pusher`
+- Commit and push, only when the user explicitly requests both and the publishing phase is delegated as one cohesive block -> `commit-pusher`
+- `quick-implementer` is compatibility-only and MUST NOT be selected for quick, self-contained work; the main agent handles that work directly.
 
-Do not use a fixed command-count threshold for exploration. Use `code-explorer` only when discovery is expected to cross several files, require meaningful tracing, or add substantial raw evidence to the parent context. Do not use it to reread known files.
-
-Use the least expensive role and reasoning effort that can satisfy the required quality bar without increasing integration risk. Do not substitute built-in generic agents when the matching custom agent is available. Avoid parallel write-heavy delegation.
+Every implementation assignment must require the smallest viable change, compatibility with existing contracts, no unauthorized dependencies or TODO markers, and proportionate non-test validation. Follow `ENGINEERING_STANDARDS.md` throughout.

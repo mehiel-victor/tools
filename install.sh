@@ -26,36 +26,31 @@ try:
   with p.open('rb') as f: tomllib.load(f)
  print('TOML validation passed')
 except ImportError: print('TOML validation skipped: Python tomllib is unavailable')
-# Preflight config before touching any destination. An exact standard header is
-# safe to recognize textually; all other existing configs require a TOML parser.
-config=home/'config.toml'; config_block=(
+# Preflight config before touching any destination.
+config=home/'config.toml'; feature_block=(
  b'[features.multi_agent_v2]\n'
  b'hide_spawn_agent_metadata = false\n'
  b'tool_namespace = "agents"\n')
+agents_block=(
+ b'[agents]\n'
+ b'enabled = true\n'
+ b'max_concurrent_threads_per_session = 3\n')
 if config.exists():
  data=config.read_bytes()
- import re
- exact_header=re.compile(r'^\s*\[\s*features\s*\.\s*multi_agent_v2\s*\]\s*(?:#.*)?$')
- def has_exact_header(raw):
-  if b'"""' in raw or b"'''" in raw: return False
-  try: text=raw.decode('utf-8')
-  except UnicodeDecodeError: return False
-  return any(exact_header.fullmatch(line) for line in text.splitlines())
- if has_exact_header(data):
-  config_has_table=True
- else:
-  try:
-   try: import tomllib as toml
-   except ImportError: import tomli as toml
-  except ImportError:
-   raise SystemExit('error: cannot inspect config.toml without Python 3.11+ tomllib or tomli; no files were changed')
-  try:
-   parsed=toml.loads(data.decode('utf-8'))
-  except Exception as e:
-   raise SystemExit(f'error: config.toml is invalid TOML ({e}); no files were changed')
-  features=parsed.get('features')
-  config_has_table=isinstance(features,dict) and 'multi_agent_v2' in features
-else: data=b''; config_has_table=False
+ try:
+  try: import tomllib as toml
+  except ImportError: import tomli as toml
+ except ImportError:
+  raise SystemExit('error: cannot inspect config.toml without Python 3.11+ tomllib or tomli; no files were changed')
+ try:
+  parsed=toml.loads(data.decode('utf-8'))
+ except Exception as e:
+  raise SystemExit(f'error: config.toml is invalid TOML ({e}); no files were changed')
+ features=parsed.get('features')
+ config_has_feature=isinstance(features,dict) and 'multi_agent_v2' in features
+ config_has_agents=isinstance(parsed.get('agents'),dict)
+else:
+ data=b''; config_has_feature=False; config_has_agents=False
 home.mkdir(parents=True,exist_ok=True)
 current={}
 def install(s,t,k):
@@ -74,19 +69,24 @@ for s in sorted((src/'skills').rglob('*')):
   rel=s.relative_to(src/'skills'); install(s,skills/rel,'skills/'+str(rel))
 install(src/'AGENTS.md',standards,'standards')
 install(src/'rules/SUBAGENT_ROUTING.md',routing,'routing')
-# Enable the multi-agent feature only when the user's config does not define it.
+# Add multi-agent defaults only when the user's config does not define the
+# corresponding table. Existing tables remain user-owned and are preserved.
 # This file is intentionally not recorded in installer state: uninstall leaves
 # the block in place because ownership cannot be proven safely after edits.
-if config.exists():
- if not config_has_table:
-  backup(config)
-  config.write_bytes(data+(b'' if not data or data.endswith(b'\n') else b'\n')+config_block)
-  print('updated:',config)
- else: print('unchanged:',config)
-else:
- config.parent.mkdir(parents=True,exist_ok=True)
- config.write_bytes(config_block)
- print('created:',config)
+missing_blocks=[]
+if not config_has_feature: missing_blocks.append(feature_block)
+if not config_has_agents: missing_blocks.append(agents_block)
+if missing_blocks:
+ if config.exists(): backup(config)
+ else: config.parent.mkdir(parents=True,exist_ok=True)
+ separator=b'' if not data or data.endswith(b'\n') else b'\n'
+ config.write_bytes(data+separator+b'\n'.join(missing_blocks))
+ print('updated:' if data else 'created:',config)
+else: print('unchanged:',config)
+if config_has_agents:
+ agents_config=parsed['agents']
+ if agents_config.get('enabled',True) is not True or agents_config.get('max_concurrent_threads_per_session')!=3:
+  print('warning: existing [agents] table preserved; set enabled = true and max_concurrent_threads_per_session = 3 to match the toolkit policy')
 # Remove package-owned files no longer present in this checkout, but never touch modified files.
 for key,item in oldstate.get('files',{}).items():
  if key in current: continue
