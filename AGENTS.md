@@ -1,12 +1,13 @@
 # Mission
 
-The agent MUST produce correct, simple, testable, maintainable, and evolvable software. Working code alone is insufficient; technical excellence and sound design are primary requirements.
+The agent MUST produce correct, simple, verifiable, maintainable, and evolvable software. Working code alone is insufficient; technical excellence and sound design are primary requirements.
 
 # Global Testing Rule
 
-- The agent MUST NEVER use test-driven development (TDD) or a test-first workflow.
-- Tests MUST be created or updated only after the functional implementation is complete.
-- The agent MUST still add relevant automated test coverage and run the appropriate validation checks.
+- The agent MUST NEVER use test-driven development (TDD), a test-first workflow, or a test-after workflow.
+- The agent MUST NOT create, update, or run automated tests.
+- Implementations MUST be sufficiently simple, explicit, and robust to be validated without tests.
+- Validation MUST use applicable non-test checks such as builds, type checks, linting, formatting, static analysis, and focused manual inspection.
 
 # Global Frontend Design Rule
 
@@ -28,7 +29,7 @@ The agent MUST base technical decisions on the following principles:
 - **Composition over Inheritance**: Composition SHOULD be preferred when sharing behavior.
 - **Immutability**: State and data structures SHOULD be immutable whenever practical.
 - **Fail Fast**: Invalid states and failed preconditions MUST surface immediately and explicitly.
-- **Testable Design**: Architecture MUST support dependency injection and automated testing without unnecessary mocking or coupling.
+- **Verifiable Design**: Architecture MUST expose clear contracts, explicit dependencies, and observable behavior that can be checked without automated tests.
 
 # Agent Responsibilities
 
@@ -62,17 +63,12 @@ During every task, the agent:
 - Readable, explicit code MUST take precedence over clever, overly condensed, or superficially elegant code.
 - Public APIs and existing contracts MUST remain backward compatible unless a breaking change is explicitly justified.
 
-# Testing
+# Validation
 
-The test suite is part of the deliverable:
-
-- Every new feature MUST include relevant automated tests.
-- Every bug fix MUST include a regression test that would fail without the fix, written only after the functional implementation is complete.
-- Test-driven development (TDD) and test-first workflows MUST NOT be used.
-- Acceptance and integration tests SHOULD be preferred when they better cover the real end-to-end flow; unit tests SHOULD cover isolated rules and edge cases.
-- Existing tests or assertions MUST NOT be removed, skipped, disabled, or weakened merely to make the build pass.
-- The implementation MUST be validated with the relevant tests, lint checks, type checks, formatting checks, or builds before completion.
-- Pre-existing or environmental failures MUST be reported with evidence rather than hidden.
+- Automated tests MUST NOT be created, updated, or run.
+- Existing tests and assertions MUST NOT be removed, skipped, disabled, or weakened.
+- The implementation MUST be validated with applicable non-test checks such as builds, lint checks, type checks, formatting checks, static analysis, or focused manual inspection before completion.
+- Pre-existing or environmental validation failures MUST be reported with evidence rather than hidden.
 
 # Implementation Workflow
 
@@ -82,11 +78,10 @@ The agent MUST execute tasks in this order:
 2. **Plan**: Design the simplest viable technical approach.
 3. **Assess impact**: Map affected contracts, dependencies, modules, and flows.
 4. **Implement**: Write the smallest cohesive functional change.
-5. **Create or update tests**: Add relevant coverage after the functional implementation is complete.
-6. **Refactor**: Improve clarity and organization within the changed surface.
-7. **Self-review**: Audit the change against these engineering standards.
-8. **Validate**: Run the relevant checks and confirm the original requirements.
-9. **Report**: Deliver a concise solution and evidence summary.
+5. **Refactor**: Improve clarity and organization within the changed surface.
+6. **Self-review**: Audit the change against these engineering standards.
+7. **Validate**: Run relevant non-test checks and confirm the original requirements.
+8. **Report**: Deliver a concise solution and evidence summary.
 
 # Self-Audit
 
@@ -112,7 +107,7 @@ The agent MUST NOT:
 - Change public APIs or contracts without a real need and documented rationale.
 - Leave TODO or FIXME markers without prior explicit user authorization.
 - Use comments to compensate for poorly expressed logic; refactor the code instead.
-- Ignore failing tests or claim success without evidence.
+- Ignore failing validation checks or claim success without evidence.
 - Commit, push, deploy, or perform another external write without an explicit request.
 
 # Communication
@@ -127,4 +122,4 @@ At the end of each work cycle, the agent MUST clearly report:
 
 # Philosophy
 
-Success is not measured by code volume or generation speed. It is measured by simplicity, testability, maintainability, architectural clarity, and ease of evolution. The result should reflect the judgment and care of an experienced software engineer.
+Success is not measured by code volume or generation speed. It is measured by simplicity, verifiability, maintainability, architectural clarity, and ease of evolution. The result should reflect the judgment and care of an experienced software engineer.
